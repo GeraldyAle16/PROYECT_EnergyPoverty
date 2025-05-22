@@ -1,0 +1,123 @@
+---
+title: "PROYECTO TF"
+author: "Geraldy Rojas"
+date: "2025-05-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+#SUBIR EL MÓDILO 100 Y 612
+##MIDES LA VARIABLE DEPENDIENTE Y EMPIEZAS A SOLO TENER LAS VARIABLES ÚTILES, LUEGO EXPORTAMOS LA BASE DE DATOS.
+
+```{r}
+library(rio)
+library(dplyr)
+library(stringr)
+library(magrittr)
+library(readr)
+library(rvest)
+library(knitr)
+library(modelsummary)
+library(arm)
+library(magrittr)
+library(ggplot2)
+library(reshape2)
+```
+
+#AHORA LUEGO DE "LIMPIEZA 1_TF", PASAREMOS A CREAR LA VARIABLE DEPENDIENTE:
+
+#CARGAMOS BD:
+```{r}
+data= "https://raw.githubusercontent.com/GeraldyAle16/Estapol_2/refs/heads/main/Basegeneral.csv"
+```
+
+```{r}
+bdpe=import(data)
+```
+
+```{r}
+str(bdpe)
+```
+
+#CONSTRUIMOS VARIABLE DEPENDIENTE: POBREZA ENERGÉTICA: POBRE O NO POBRE ENERGÉTICO
+```{r}
+#CALCULAMOS EL NIVEL DE PRIVACIÓN DE ACUERDO A las 5 dimensiones del MEPI
+
+datos = bdpe %>% 
+  mutate(
+    privacion_cocina = ifelse(P1135 == 1 | P1136 == 1 | P1137 == 1 | P1139 == 1, 1,0 ),
+    privacion_ilumina = ifelse( P1121 == 1, 0, 1),
+    privacion_comuni = ifelse( P1141 == 1 | P1142 == 1, 0,1),
+    privacion_electro = ifelse( refrigeradora == 1, 0, 1),
+    privacion_entreteni = ifelse ( radio == 1 | tv_color == 1 | tv_bn == 1, 0, 1)
+  )
+```
+
+#CALCULAMOS PUNTAJE DE PRIVACION CON SUS PESOS (DEL MEPI)
+```{r}
+datos = datos %>% 
+  mutate( puntaje = ( 0.40 * privacion_cocina) +
+                    (0.20 * privacion_ilumina) +
+                    (0.13 * privacion_comuni)+
+                    (0.13 * privacion_electro)+
+                    (0.13 * privacion_entreteni)
+          )
+```
+
+#CREAMOS VARIABLE DEPENDIENTE A PARTIR DEL PUNTAJE:
+-	Si Di≥0.26, el hogar será pobre energético (etiqueta 1).
+-	Si Di<0.26, el hogar será no pobre energético (etiqueta 0).
+
+
+```{r}
+datos = datos %>% 
+  mutate( Pobre_energético = ifelse(datos$puntaje >= 0.26, 1, 0))
+```
+
+
+#VEMOS LA DISTRIBUCIÓN DE LA VARIABLE DEPENDIENTE
+```{r}
+ggplot(datos, aes(x = factor(Pobre_energético))) +
+  geom_bar(aes(y = ..count..), fill = "#2E8B57", width = 0.5) +  # Color naranja sobrio, barras más delgadas
+  geom_text(stat = "count", aes(label = scales::percent(..count../sum(..count..))),
+            vjust = -0.5, size = 3.5, fontface = "bold") +
+  labs(
+    title = "Distribución de hogares en pobreza energética",
+    x = "¿Está en pobreza energética? (0 = No, 1 = Sí)",
+    y = "Número de hogares"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 15),
+    axis.text = element_text(face = "bold")
+  )
+
+
+```
+
+```{r}
+str(datos)
+```
+```{r}
+library(dplyr)
+
+# Crear nueva base con solo las variables necesarias
+datos_limpios <- datos %>%
+  dplyr::select (
+    CONGLOME, VIVIENDA, HOGAR, UBIGEO,
+    P101, P102, `P1172$02`, P207, P208A, P301A,
+    MIEPERHO, INGHOG2D, Pobre_energético
+  )
+
+```
+
+
+```{r}
+export(datos_limpios, "Consolidado.csv")
+```
+
+
