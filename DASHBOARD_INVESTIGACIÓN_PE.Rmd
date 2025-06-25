@@ -1,0 +1,2261 @@
+---
+title: "ENERGY POVERTY IN LORETO (2024)"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    storyboard: true
+    vertical_layout: fill
+    theme: flatly
+    mathjax: default
+    source_code: embed
+    css: styles.css
+    navbar:
+      - { icon: "fa-brands fa-github fa-2xl", href: "https://google.com", align: right }
+---
+
+<style>
+/* CSS para asegurar que el texto sea visible en un fondo blanco */
+body {
+  color: #333333; /* Un gris oscuro, casi negro, para el texto principal */
+}
+
+/* Puedes añadir más reglas si el problema persiste en elementos específicos */
+h1, h2, h3, h4, h5, h6 {
+  color: #222222; /* Un color un poco más oscuro para los títulos */
+}
+
+p, li, div {
+  color: #444444; /* Para párrafos, listas y otros bloques de texto */
+}
+
+/* Si tu texto está dentro de un bloque específico, como un 'valueBox' o 'tabset', 
+   puede que necesites ser más específico. Por ejemplo: */
+.value-box .value {
+  color: #000000; /* Negro para los números grandes de valueBox */
+}
+
+.tab-pane {
+  color: #333333; /* Color de texto dentro de las pestañas */
+}
+
+/* Si tienes código R mostrado, también podrías necesitar ajustarlo */
+pre, code {
+  color: #000000; /* Asegura que el código sea negro */
+  background-color: #f8f8f8; /* Un fondo ligeramente gris para bloques de código */
+}
+</style>
+
+```{r setup, include=FALSE}
+
+## Importación y manipulación de datos
+library(rio)
+library(readxl)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(labelled)
+library(tidyverse)
+
+##
+## Visualización
+library(ggplot2)
+library(plotly)
+library(ggthemes)
+library(scales)
+library(ggdist)
+library(GGally)
+
+##
+## Visualización geográfica
+library(mapsPERU)
+library(sf)
+
+##
+## Tablas y reportes
+library(knitr)
+library(kableExtra)
+library(flextable)
+library(DT)
+library(gtsummary)
+
+##
+## Dashboards y presentación
+library(flexdashboard)
+library(patchwork)
+library(gridExtra)
+library(fontawesome)
+
+##
+## Análisis estadístico y de datos
+library(caret)
+library(PerformanceAnalytics)
+library(corrplot)
+library(broom)
+library(nortest)
+library(moments)
+
+##
+## Análisis multivariado y clustering
+library(FactoMineR)
+library(factoextra)
+library(FactoInvestigate)
+library(NbClust)
+
+
+bdt= read.csv("https://raw.githubusercontent.com/GeraldyAle16/PROYECT_EnergyPoverty/refs/heads/main/ConsolidadoTF2.csv")
+
+library(flexdashboard)
+library(fontawesome)
+htmltools::tagList(fontawesome::fa_html_dependency())
+
+computeRegiones = function(...) return(24)
+computeProvincias = function(...) return(8)
+computeHogares = function(...) return(1359)
+```
+
+
+Introduction {data-icon="fa-regular fa-lightbulb fa-beat-fade" style="color: #f7f7f7;"}
+===================================== 
+
+Columns {data-width=400}
+-----------------------------------------------------------------------
+
+### regiones del Perú
+
+```{r}
+regiones = computeRegiones()
+valueBox(
+  value = regiones,
+  caption = "Regiones del Perú",
+  icon = "fas fa-earth-americas",
+  color = "success"  # verde
+)
+```
+
+### provincias de Loreto
+
+```{r}
+provincias = computeProvincias()
+valueBox(
+  value = provincias,
+  caption = "Provincias de Loreto",
+  icon = "fas fa-mountain-sun",
+  color = "info"  # celeste
+)
+```
+
+### hogares evaluados 
+
+```{r}
+hogares = computeHogares()
+valueBox(
+  value = hogares,
+  caption = "Hogares evaluados",
+  icon = "fas fa-location-dot",
+  color = ifelse(hogares > 1359, "primary", "warning")
+)
+```
+
+### CONTEXTO: {data-height=400}
+
+- **Brecha persistente de acceso a energía en el Perú:** En Loreto, más del 70 % de los hogares rurales aún cocina con leña o estiércol y muchos no acceden a electricidad formal.
+
+- **Es la región con mayor pobreza energética del Perú, según el MEPI adaptado (Vásquez et al., 2023)**.
+
+- **Objetivo del estudio:** Identificar qué factores socioeconómicos inciden en la pobreza energética de los hogares loretanos durante 2024, a partir de la ENAHO. 
+
+
+Rows
+-----------------------------------------------------------------------
+### MAPA DEL PERÚ
+
+
+
+
+Formulation {data-navmenu="Dependent Variable" data-icon="fa-solid fa-code-commit fa-beat-fade" style="color: #f5f5f5;"} 
+===================================== 
+
+Column {data-width=500} 
+-----------------------------------------------------------------------
+
+### ⚡ Multidimensional Energy Poverty Index (MEPI)
+
+\[
+\text{MEPI} = H \times A
+\]
+
+---
+
+> #### **📐 ¿Qué significa cada componente?**
+
+- \( H \) (*Headcount Ratio*): proporción de hogares en pobreza energética dentro de la muestra.  
+  \[
+  H = \frac{q}{n}
+  \]
+  - \( q \): número de hogares en pobreza energética  
+  - \( n \): número total de hogares en la muestra
+
+- \( A \) (*Average Intensity* o *intensidad promedio de la pobreza energética*): intensidad promedio de privación energética entre los hogares pobres.
+- Se calcula como la sumatoria de las privaciones energéticas experimentadas por cada persona en *q*.
+
+---
+
+> #### **📊 Interpretación del índice**
+
+- El **MEPI** tiene un umbral (*k*) de **0.30**, según *Nussbaumer et al. (2012)*.  
+  El índice varía entre 0 y 1, donde:
+  - **0** → No existe pobreza energética  
+  - **1** → Pobreza energética absoluta (todos los hogares tienen privaciones extremas)
+  
+- A mayor valor del MEPI, mayor es la **privación energética** en términos del acceso y uso de servicios esenciales como electricidad, cocina moderna y comunicación.
+
+
+Columns {data-width=500} 
+-----------------------------------------------------------------------
+
+### PREGUNTA E HIPÓTESIS
+
+> ***🎯 Pregunta de investigación***
+
+> ***¿Qué factores socioeconómicos influyen en la pobreza energética de los hogares de la región de Loreto durante el año 2024?***
+
+
+> ***🧠 Planteamiento inicial***
+
+Se plantea que la **pobreza energética en Loreto (2024)** está significativamente relacionada con los siguientes factores:
+
+- 🏚️ **Condiciones estructurales de la vivienda** (material precario)
+- 💰 **Ingreso per cápita del hogar**
+- 🍽️ **Inseguridad alimentaria**
+- 🗺️ **Estrato geográfico (urbano/rural)**
+- 👨‍👩‍👧‍👦 **Número de miembros del hogar**
+- 🎓 **Nivel educativo del jefe o jefa de hogar**
+
+> ***🧠 Hipótesis central***
+
+📌 Los hogares con viviendas precarias, mayor número de integrantes, menores ingresos per cápita, jefes o jefas con bajo nivel educativo y que enfrentan inseguridad alimentaria tienen una probabilidad significativamente mayor de experimentar pobreza energética en la región de Loreto.
+
+
+
+Loreto Case Study {data-navmenu="Dependent Variable" data-icon="fa-solid fa-code-commit fa-beat-fade" style="color: #f5f5f5;"}  
+=====================================      
+
+Column {data-width=500} **{.tabset}**
+-----------------------------------------------------------------------
+
+### El Umbral de Pobreza Energética {data-height=600}
+
+El MEPI tiene un rango de 0 a 1, donde 0 indica ausencia de pobreza energética y 1 indica pobreza energética absoluta. Nussbaumer et al. (2012) proponen un umbral (k) de **0.30** para el MEPI.
+
+En el Perú, según Vásquez et al. (2023), el umbral de **0.26** es más adecuado para reducir la incertidumbre en la aplicación del MEPI.
+
+Así, la **variable dependiente "Pobreza Energética"** se define como:
+
+```{r}
+# Crear la tabla
+clasificacion <- tibble(
+  `Valor del índice Dᵢ` = c("Dᵢ ≥ 0.26", "Dᵢ < 0.26"),
+  `Clasificación` = c("Pobre energético", "No pobre energético"),
+  `Valor binario` = c(1, 0)
+)
+
+# Mostrar tabla centrada y con bordes
+kable(clasificacion, caption = "Criterio de Clasificación de Pobreza Energética", format = "html") %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "bordered"),
+    full_width = FALSE,
+    position = "center"
+  )
+```
+
+**RESULTADO:** Variable dicotómica que permite identificar y analizar la pobreza energética a nivel de hogares.
+
+### Tabla de Distribución {data-height=400} 
+
+```{r}
+tabla <- bdt %>%
+  count(Pobre_energético) %>%
+  mutate(
+    Categoría = ifelse(Pobre_energético == 1, "Pobre energético", "No pobre energético"),
+    Porcentaje = round(100 * n / sum(n), 1)
+  ) %>%
+  dplyr::select(Categoría, Frecuencia = n, Porcentaje)
+
+datatable(tabla,
+          options = list(dom = 't', pageLength = 5),
+          caption = 'Distribución de hogares según Pobreza Energética',
+          rownames = FALSE)
+```
+
+Column {data-width=500} {.tabset}
+-----------------------------------------------------------------------
+
+### MAPA GEOGRÁFICO
+
+```{r}
+provincias_loreto <- map_PROV %>%
+  filter(COD_DEPARTAMENTO == "160000")
+```
+
+```{r}
+prov_data <- bdt %>%
+  group_by(provincia_ubigeo) %>%
+  summarise(
+    total_hogares = n(),
+    hogares_pobres = sum(Pobre_energético == 1, na.rm = TRUE),
+    pct_pobre_energetico = hogares_pobres / total_hogares
+  )
+```
+
+```{r}
+# Asegura que ambos sean tipo "character"
+prov_data$provincia_ubigeo <- as.character(prov_data$provincia_ubigeo)
+provincias_loreto$COD_PROVINCIA <- as.character(provincias_loreto$COD_PROVINCIA)
+
+
+```
+
+
+```{r}
+# Unión por código
+provincias_loreto <- provincias_loreto %>%
+  left_join(prov_data, by = c("COD_PROVINCIA" = "provincia_ubigeo"))
+```
+
+
+```{r}
+# Asegurar que siga siendo un objeto sf
+provincias_loreto <- st_as_sf(provincias_loreto)
+```
+
+```{r}
+# Transformar a WGS84
+provincias_geojson <- st_transform(provincias_loreto, crs = 4326)
+
+# Agregar columna de hover personalizada
+provincias_geojson <- provincias_geojson %>%
+  mutate(
+    porcentaje_redondeado = round(pct_pobre_energetico * 100, 1),
+    hover_text = paste0(
+      "<b>", PROVINCIA, "</b><br>",
+      "Pobreza Energética: ", porcentaje_redondeado, "%"
+    )
+  )
+
+# Calcular centroides para tooltips
+centroides <- st_centroid(provincias_geojson) %>%
+  mutate(label_text = hover_text)
+
+fig <- plot_ly() %>%
+  # Capa de polígonos con bordes oscuros
+  add_sf(
+    data = provincias_geojson,
+    split = ~PROVINCIA,
+    color = ~pct_pobre_energetico,
+    text = ~hover_text,
+    hoverinfo = "text",
+    colors = "PuBuGn",
+    showscale = TRUE,
+    zmin = 0.40,
+    zmax = 0.95,
+    colorbar = list(
+      title = list(text = "Pobreza Energética (%)"),
+      tickvals = c(0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95),
+      ticktext = c("65%", "70%", "75%", "80%", "85%", "90%", "95%"),
+      tickmode = "array",
+      len = 0.5
+    ),
+    line = list(color = "#333333", width = 1.2)  # Aquí se definen los bordes
+  ) %>%
+  # Capa invisible para hover
+  add_markers(
+    data = centroides,
+    x = ~st_coordinates(geometry)[,1],
+    y = ~st_coordinates(geometry)[,2],
+    text = ~label_text,
+    hoverinfo = "text",
+    marker = list(
+      opacity = 0,
+      color = "rgba(255,0,0,0)"
+    ),
+    showlegend = FALSE
+  ) %>%
+  layout(
+    title = list(
+      text = "<b>Loreto: porcentaje de hogares en pobreza energética<br>por provincia</b>",
+      x = 0.5,
+      xanchor = "center",
+      font = list(size = 15)
+    ),
+    margin = list(b = 80),
+    annotations = list(
+      list(
+        x = 0,
+        y = -0.15,
+        text = "Fuente: ENAHO 2024. Elaboración propia.",
+        showarrow = FALSE,
+        xref = "paper",
+        yref = "paper",
+        xanchor = "left",
+        yanchor = "bottom",
+        font = list(size = 12, color = "gray40")
+      )
+    )
+  )
+
+fig
+
+
+
+```
+
+### DISTRIBUCIÓN (%)
+
+```{r}
+# Tabla de datos con porcentaje y etiquetas
+tabla_pe <- bdt %>%
+  count(Pobre_energético) %>%
+  mutate(
+    Categoria = factor(Pobre_energético, labels = c("No Pobre Energético", "Pobre Energético")),
+    Porcentaje = round(100 * n / sum(n), 1),
+    Etiqueta = paste0(n, " (", Porcentaje, "%)")
+  )
+
+# Gráfico final
+ggplot(tabla_pe, aes(x = Categoria, y = n)) +
+  geom_bar(stat = "identity", fill = "#7AC5CD", width = 0.6) +
+  geom_text(aes(label = Etiqueta), vjust = -0.5, size = 4.2) +
+  theme_minimal() +
+  labs(
+    title = "Distribución de la Pobreza Energética",
+    x = "Condición del hogar",
+    y = "Frecuencia",
+    caption = "Encuesta Nacional de Hogares (ENAHO) - 2024, INEI Perú.\nElaboración propia."
+  ) +
+  ylim(0, max(tabla_pe$n) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.caption = element_text(hjust = 0, size = 9, margin = margin(t = 10))
+  )
+```
+
+
+Numerical Variables {data-navmenu="Independent Variables" data-icon="fa-solid fa-code-branch fa-beat-fade" style="color: #f6f4fa;"} 
+=====================================  
+
+Column {data-width=500} {.tabset}
+-----------------------------------------------------------------------
+
+### Electricidad (S/.)
+
+```{r}
+g1 <- ggplot(bdt, aes(y = P1172.02)) +
+  geom_boxplot(fill = "#7AC5CD") +
+  labs(title = "Boxplot del gasto mensual en electricidad", y = "Soles (S/.)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+ggplotly(g1) %>%
+  layout(
+    margin = list(b = 100),  # Más espacio abajo
+    annotations = list(
+      list(
+        x = 0, y = -0.1,  # Más arriba para que se vea al knit
+        text = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia.",
+        showarrow = FALSE,
+        xref = "paper", yref = "paper",
+        xanchor = "left",
+        font = list(size = 11, color = "gray40")
+      )
+    )
+  )
+```
+
+### Ingreso per cápita (S/.)
+
+```{r}
+g2 <- ggplot(bdt, aes(y = ingreso_pc_mensual)) +
+  geom_boxplot(fill = "#7AC5CD") +
+  labs(title = "Boxplot del ingreso per cápita mensual", y = "Soles (S/.)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+ggplotly(g2) %>%
+  layout(
+    margin = list(b = 100),
+    annotations = list(
+      list(
+        x = 0, y = -0.1,
+        text = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia.",
+        showarrow = FALSE,
+        xref = "paper", yref = "paper",
+        xanchor = "left",
+        font = list(size = 11, color = "gray40")
+      )
+    )
+  )
+
+
+```
+
+### Edad del jefe(a) del hogar
+
+```{r}
+g3 <- ggplot(bdt, aes(x = P208A)) +
+  geom_histogram(binwidth = 2, fill = "#7AC5CD", color = "white") +
+  scale_x_continuous(
+    breaks = seq(15, 95, by = 5),
+    limits = c(15, 95)
+  ) +
+  labs(
+    title = "Distribución de la edad del jefe/a de hogar",
+    x = "Edad (años)", y = "Frecuencia"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+ggplotly(g3) %>%
+  layout(
+    margin = list(b = 100),
+    annotations = list(
+      list(
+        x = 0, y = -0.1,
+        text = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia.",
+        showarrow = FALSE,
+        xref = "paper", yref = "paper",
+        xanchor = "left",
+        font = list(size = 11, color = "gray40")
+      )
+    )
+  )
+
+```
+
+### Miembros del hogar
+
+```{r}
+g4 <- ggplot(bdt, aes(x = factor(MIEPERHO))) +
+  geom_bar(fill = "#7AC5CD") +
+  labs(
+    title = "Frecuencia del número de miembros del hogar",
+    x = "Número de personas", y = "Frecuencia"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+ggplotly(g4) %>%
+  layout(
+    margin = list(b = 100),
+    annotations = list(
+      list(
+        x = 0, y = -0.1,
+        text = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia.",
+        showarrow = FALSE,
+        xref = "paper", yref = "paper",
+        xanchor = "left",
+        font = list(size = 11, color = "gray40")
+      )
+    )
+  )
+
+```
+
+Column {data-width=500} 
+-----------------------------------------------------------------------
+
+### Estadísticos descripticos de las variables numéricas:
+
+```{r}
+# Seleccionar las variables
+vars_numericas <- bdt %>%
+ dplyr::select(
+    `Gasto mensual electricidad` = P1172.02,
+    `Ingreso per cápita mensual` = ingreso_pc_mensual,
+    `Edad del jefe/a de hogar` = P208A,
+    `Número de miembros del hogar` = MIEPERHO
+  )
+
+# Calcular resumen con nombres únicos
+resumen_multi <- vars_numericas %>%
+  summarise(across(everything(), list(
+    Media = ~mean(., na.rm = TRUE),
+    Mediana = ~median(., na.rm = TRUE),
+    SD = ~sd(., na.rm = TRUE),
+    Mínimo = ~min(., na.rm = TRUE),
+    Q1 = ~quantile(., 0.25, na.rm = TRUE),
+    Q3 = ~quantile(., 0.75, na.rm = TRUE),
+    Máximo = ~max(., na.rm = TRUE),
+    IC_95_inf = ~mean(.) - qt(0.975, df = sum(!is.na(.)) - 1) * sd(.) / sqrt(sum(!is.na(.))),
+    IC_95_sup = ~mean(.) + qt(0.975, df = sum(!is.na(.)) - 1) * sd(.) / sqrt(sum(!is.na(.)))
+  ), .names = "{.col}_{.fn}")) %>%
+  pivot_longer(everything(), names_to = c("Variable", "Estadístico"), names_sep = "_", values_to = "Valor") %>%
+  pivot_wider(names_from = Variable, values_from = Valor) %>%
+  rename(`Estadístico` = Estadístico)
+
+# Mostrar tabla
+resumen_multi %>%
+  kable(format = "html", digits = 2,
+        caption = "Medidas de tendencia central y dispersión") %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "responsive"),
+    full_width = FALSE,
+    position = "center",
+    font_size = 15  # Aumenta la legibilidad general
+  ) %>%
+  row_spec(0, bold = TRUE)  # Negrita solo en cabecera
+
+
+```
+
+### Principales hallazgos: {data-height=300}
+
+- **Gasto mensual en electricidad**: La mayoría de los hogares gasta menos de S/ 100 al mes, aunque existen valores atípicos con gastos significativamente más altos.
+- **Ingreso per cápita mensual**: Predomina un ingreso bajo, con presencia de valores extremos que revelan alta desigualdad en la distribución.
+- **Edad del jefe/a del hogar**: La distribución es aproximadamente simétrica, con concentración entre los 35 y 60 años — el núcleo poblacional más activo.
+- **Número de miembros del hogar**: La mayoría de los hogares tiene entre 3 y 5 miembros, lo que sugiere tamaños familiares medios con implicancias en consumo y acceso a servicios.
+
+Categorical Variables {.storyboard data-navmenu="Independent Variables" data-icon="fa-solid fa-code-branch fa-beat-fade" style="color: #f6f4fa;"} 
+===================================== 
+
+
+### Material de pared {data-commentary-width=400}
+    
+```{r}
+# Tabla de datos con porcentaje MATERIAL
+tabla_m <- bdt %>%
+  count(material_pared) %>%
+  mutate(
+    Categoria = factor(material_pared, labels = c("Duradero", "Precario")),
+    Porcentaje = round(100 * n / sum(n), 1),
+    Etiqueta = paste0(n, " (", Porcentaje, "%)")
+  )
+
+# Gráfico final
+ggplot(tabla_m, aes(x = Categoria, y = n)) +
+  geom_bar(stat = "identity", fill = "#9BCD9B", width = 0.6) +
+  geom_text(aes(label = Etiqueta), vjust = -0.5, size = 4.2) +
+  theme_minimal() +
+  labs(
+    title = "Distribución de hogares según \nmaterial predominante de pared",
+    x = "Material del hogar",
+    y = "Frecuencia",
+    caption = "Encuesta Nacional de Hogares (ENAHO) - 2024, INEI Perú.\nElaboración propia."
+  ) +
+  ylim(0, max(tabla_m$n) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.caption = element_text(hjust = 0, size = 9, margin = margin(t = 10))
+  )
+```
+
+*** 
+
+```{r}
+bdt %>%
+  filter(!is.na(material_pared)) %>%
+  count(material_pared) %>%
+  mutate(
+    Porcentaje = paste0(round(100 * n / sum(n), 1), "%")
+  ) %>%
+  rename(Categoría = material_pared, Frecuencia = n) %>%
+  kable(format = "html", caption = "Distribución de hogares según material predominante de pared") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = F, position = "center", font_size = 14)
+```
+
+**INTERPRETACIÓN:** 
+
+- La mayoría de los hogares en Loreto se encuentran construidos con **materiales de pared precarios**.
+
+- Esta variable refleja tanto **limitaciones económicas** como **rezagos en infraestructura**.
+
+- La precariedad estructural puede estar asociada a un menor acceso a electricidad y a una menor eficiencia energética, por lo que es un posible **determinante clave de la pobreza energética**.
+
+### Educación Básica Completa {data-commentary-width=400}
+
+```{r}
+# Tabla de datos con porcentaje EDUCACIÓN
+tabla_e <- bdt %>%
+  count(educacion_basica_completa) %>%
+  mutate(
+    Categoria = factor(educacion_basica_completa, labels = c("Sí", "No")),
+    Porcentaje = round(100 * n / sum(n), 1),
+    Etiqueta = paste0(n, " (", Porcentaje, "%)")
+  )
+
+# Gráfico final
+ggplot(tabla_e, aes(x = Categoria, y = n)) +
+  geom_bar(stat = "identity", fill = "#9BCD9B", width = 0.6) +
+  geom_text(aes(label = Etiqueta), vjust = -0.5, size = 4.2) +
+  theme_minimal() +
+  labs(
+    title = "Distribución de hogares según \nEducación Básica Completa",
+    x = "Educación Básica Completa",
+    y = "Frecuencia",
+    caption = "Encuesta Nacional de Hogares (ENAHO) - 2024, INEI Perú.\nElaboración propia."
+  ) +
+  ylim(0, max(tabla_e$n) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.caption = element_text(hjust = 0, size = 9, margin = margin(t = 10))
+  )
+```
+
+***
+
+```{r}
+bdt %>%
+  count(educacion_basica_completa) %>%
+  mutate(
+    Categoría = ifelse(educacion_basica_completa == 1, "Tiene educación básica completa", "No tiene educación básica completa"),
+    Porcentaje = paste0(round(100 * n / sum(n), 1), "%")
+  ) %>%
+  dplyr::select(Categoría, Frecuencia = n, Porcentaje) %>%
+  kable(format = "html", caption = "Distribución de hogares según educación básica completa") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = F, position = "center", font_size = 14)  
+```
+
+**INTERPRETACIÓN:**
+
+- Más de la mitad de los hogares tienen jefes o jefas sin **educación básica completa**, lo que indica bajos niveles de **capital humano** en la región.
+
+- La educación influye en las oportunidades laborales e ingresos, pero también en la **capacidad para comprender y gestionar el consumo energético**.
+
+- Esta variable es clave para explicar la pobreza energética desde un **enfoque de capacidades**.
+
+### Estrato Geográfico {data-commentary-width=400}
+
+```{r}
+# Tabla de datos con porcentaje ESTRATO
+tabla_s <- bdt %>%
+  count(estrato_bin) %>%
+  mutate(
+    Categoria = factor(estrato_bin, labels = c("Urbano", "Rural")),
+    Porcentaje = round(100 * n / sum(n), 1),
+    Etiqueta = paste0(n, " (", Porcentaje, "%)")
+  )
+
+# Gráfico final
+ggplot(tabla_s, aes(x = Categoria, y = n)) +
+  geom_bar(stat = "identity", fill = "#9BCD9B", width = 0.6) +
+  geom_text(aes(label = Etiqueta), vjust = -0.5, size = 4.2) +
+  theme_minimal() +
+  labs(
+    title = "Distribución de hogares según Estrato Geográfico",
+    x = "Estrato Geográfico",
+    y = "Frecuencia",
+    caption = "Encuesta Nacional de Hogares (ENAHO) - 2024, INEI Perú.\nElaboración propia."
+  ) +
+  ylim(0, max(tabla_s$n) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.caption = element_text(hjust = 0, size = 9, margin = margin(t = 10))
+  )
+```
+
+***
+```{r}
+bdt %>%
+  filter(!is.na(estrato_bin)) %>%
+  count(estrato_bin) %>%
+  mutate(
+    Porcentaje = paste0(round(100 * n / sum(n), 1), "%")
+  ) %>%
+  rename(Categoría = estrato_bin, Frecuencia = n) %>%
+  kable(format = "html", caption = "Distribución de hogares según estrato geográfico") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = F, position = "center", font_size = 14)
+```
+
+**INTERPRETACIÓN:**
+
+- La distribución está relativamente equilibrada, pero hay una **ligera mayoría de hogares rurales**.
+
+- Esta variable es crítica porque las zonas rurales en Loreto enfrentan mayores barreras de acceso a servicios energéticos, tanto por **limitada infraestructura** como por **altos costos**.
+
+- Se espera que los hogares rurales tengan una **mayor probabilidad de estar en pobreza energética** en comparación con los urbanos.
+
+### Inseguridad alimentaria {data-commentary-width=400}
+
+```{r}
+# Tabla de datos con porcentaje INSEGURIDAD ALIMENTARIA
+tabla_i <- bdt %>%
+  count(inseguridad_alimentaria) %>%
+  mutate(
+    Categoria = factor(inseguridad_alimentaria, labels = c("Sí", "No")),
+    Porcentaje = round(100 * n / sum(n), 1),
+    Etiqueta = paste0(n, " (", Porcentaje, "%)")
+  )
+
+# Gráfico final
+ggplot(tabla_i, aes(x = Categoria, y = n)) +
+  geom_bar(stat = "identity", fill = "#9BCD9B", width = 0.6) +
+  geom_text(aes(label = Etiqueta), vjust = -0.5, size = 4.2) +
+  theme_minimal() +
+  labs(
+    title = "Distribución de hogares según \ninseguridad alimentaria",
+    x = "Inseguridad Alimentaria",
+    y = "Frecuencia",
+    caption = "Encuesta Nacional de Hogares (ENAHO) - 2024, INEI Perú.\nElaboración propia."
+  ) +
+  ylim(0, max(tabla_i$n) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.caption = element_text(hjust = 0, size = 9, margin = margin(t = 10))
+  )
+```
+
+***
+```{r}
+bdt %>%
+  count(inseguridad_alimentaria) %>%
+  mutate(
+    Categoría = ifelse(inseguridad_alimentaria == 1, "Tiene inseguridad alimentaria", "No tiene inseguridad alimentaria"),
+    Porcentaje = paste0(round(100 * n / sum(n), 1), "%")
+  ) %>%
+  dplyr::select(Categoría, Frecuencia = n, Porcentaje) %>%
+  kable(format = "html", caption = "Distribución de hogares según inseguridad alimentaria") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = F, position = "center", font_size = 14)
+```
+
+**INTERPRETACIÓN:**
+
+- Aunque es una proporción menor, casi **uno de cada cinco hogares sufre inseguridad alimentaria**, un indicador severo de **vulnerabilidad multidimensional**.
+
+- Esta condición puede implicar una **priorización del gasto en alimentos sobre servicios básicos** como la electricidad, contribuyendo así a la pobreza energética.
+
+- Además, refleja una **privación simultánea** que puede reforzar la pobreza estructural en la región.
+
+Numerical Variables vs. PE {data-navmenu="Bivariate Analysis" data-icon="fa-solid fa-chart-simple fa-beat-fade" style="color: #f5f3f7;"}
+=====================================  
+
+Column {data-width=500} {.tabset}
+-----------------------------------------------------------------------
+
+### Electricidad vs. PE 
+
+```{r}
+#GASTO MENSUAL EN ELECTRICIDAD
+g_ic <- bdt %>%
+  group_by(Pobre_energético) %>%
+  summarise(
+    Media = mean(P1172.02, na.rm = TRUE),
+    SD = sd(P1172.02, na.rm = TRUE),
+    N = n(),
+    SE = SD / sqrt(N),
+    IC_Inf = Media - 1.96 * SE,
+    IC_Sup = Media + 1.96 * SE
+  ) %>%
+  mutate(
+    Grupo = factor(Pobre_energético, labels = c("No pobre energético", "Pobre energético"))
+  )
+
+# Gráfico con etiquetas de los intervalos
+ggplot(g_ic, aes(x = Grupo, y = Media)) +
+  geom_bar(stat = "identity", fill = "#66CDAA", color = "black", width = 0.6) +
+  geom_errorbar(aes(ymin = IC_Inf, ymax = IC_Sup), width = 0.2) +
+
+  # Etiqueta de la media
+  geom_text(aes(label = paste("Media:", round(Media, 2)), x = as.numeric(Grupo) + 0.15), 
+            vjust = 0.5, hjust = 0, size = 4, fontface = "bold") +
+
+  # Etiquetas del IC inferior y superior
+  geom_text(aes(y = IC_Inf, label = paste("IC↓", round(IC_Inf, 2))), 
+            vjust = 1.5, size = 3, color = "white") +
+  geom_text(aes(y = IC_Sup, label = paste("IC↑", round(IC_Sup, 2))), 
+            vjust = -0.5, size = 3, color = "#1B5E20") +
+
+  labs(
+    title = "Gasto mensual en electricidad según Pobreza Energética",
+    x = "Condición de pobreza energética",
+    y = "Promedio del gasto (S/.)",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  ylim(0, max(g_ic$IC_Sup) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.caption = element_text(hjust = 0, size = 9)
+  )
+```
+
+### Ingreso per cápita vs. PE
+
+```{r}
+# INGRESO PER CÁPITA
+i_ic <- bdt %>%
+  group_by(Pobre_energético) %>%
+  summarise(
+    Media = mean(ingreso_pc_mensual, na.rm = TRUE),
+    SD = sd(ingreso_pc_mensual, na.rm = TRUE),
+    N = n(),
+    SE = SD / sqrt(N),
+    IC_Inf = Media - 1.96 * SE,
+    IC_Sup = Media + 1.96 * SE
+  ) %>%
+  mutate(
+    Grupo = factor(Pobre_energético, labels = c("No pobre energético", "Pobre energético"))
+  )
+
+# Gráfico con etiquetas de los intervalos
+ggplot(i_ic, aes(x = Grupo, y = Media)) +
+  geom_bar(stat = "identity", fill = "#7AC5CD", color = "black", width = 0.6) +
+  geom_errorbar(aes(ymin = IC_Inf, ymax = IC_Sup), width = 0.2) +
+
+  # Etiqueta de la media
+  geom_text(aes(label = paste("Media:", round(Media, 2)), x = as.numeric(Grupo) + 0.15), 
+            vjust = 0.5, hjust = 0, size = 4, fontface = "bold") +
+
+  # Etiquetas del IC inferior y superior
+  geom_text(aes(y = IC_Inf, label = paste("IC↓", round(IC_Inf, 2))), 
+            vjust = 1.5, size = 3, color = "white") +
+  geom_text(aes(y = IC_Sup, label = paste("IC↑", round(IC_Sup, 2))), 
+            vjust = -0.5, size = 3, color = "#1B5E20") +
+
+  labs(
+    title = "Ingreso per cápita mensual según Pobreza Energética",
+    x = "Condición de pobreza energética",
+    y = "Promedio del ingreso (S/.)",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  ylim(0, max(i_ic$IC_Sup) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.caption = element_text(hjust = 0, size = 9)
+  )
+
+```
+
+### Edad del jefe(a) del hogar vs. PE
+
+```{r}
+e_ic <- bdt %>%
+  group_by(Pobre_energético) %>%
+  summarise(
+    Media = mean(P208A, na.rm = TRUE),
+    SD = sd(P208A, na.rm = TRUE),
+    N = n(),
+    SE = SD / sqrt(N),
+    IC_Inf = Media - 1.96 * SE,
+    IC_Sup = Media + 1.96 * SE
+  ) %>%
+  mutate(
+    Grupo = factor(Pobre_energético, labels = c("No pobre energético", "Pobre energético"))
+  )
+
+# Gráfico con etiquetas de los intervalos
+ggplot(e_ic, aes(x = Grupo, y = Media)) +
+  geom_bar(stat = "identity", fill = "#79CDCD", color = "black", width = 0.6) +
+  geom_errorbar(aes(ymin = IC_Inf, ymax = IC_Sup), width = 0.2) +
+
+  # Etiqueta de la media
+  geom_text(aes(label = paste("Media:", round(Media, 2)), x = as.numeric(Grupo) + 0.15), 
+            vjust = 0.5, hjust = 0, size = 4, fontface = "bold") +
+
+  # Etiquetas del IC inferior y superior
+  geom_text(aes(y = IC_Inf, label = paste("IC↓", round(IC_Inf, 2))), 
+            vjust = 1.5, size = 3, color = "white") +
+  geom_text(aes(y = IC_Sup, label = paste("IC↑", round(IC_Sup, 2))), 
+            vjust = -0.5, size = 3, color = "#1B5E20") +
+
+  labs(
+    title = "Edad del jefe/a de hogar según Pobreza Energética",
+    x = "Condición de pobreza energética",
+    y = "Promedio de la edad (años)",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  ylim(0, max(e_ic$IC_Sup) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.caption = element_text(hjust = 0, size = 9)
+  )
+```
+
+### Miembros del hogar vs. PE
+
+```{r}
+e_ic <- bdt %>%
+  group_by(Pobre_energético) %>%
+  summarise(
+    Media = mean(MIEPERHO, na.rm = TRUE),
+    SD = sd(MIEPERHO, na.rm = TRUE),
+    N = n(),
+    SE = SD / sqrt(N),
+    IC_Inf = Media - 1.96 * SE,
+    IC_Sup = Media + 1.96 * SE
+  ) %>%
+  mutate(
+    Grupo = factor(Pobre_energético, labels = c("No pobre energético", "Pobre energético"))
+  )
+
+# Gráfico con etiquetas de los intervalos
+ggplot(e_ic, aes(x = Grupo, y = Media)) +
+  geom_bar(stat = "identity", fill = "#9AC0CD", color = "black", width = 0.6) +
+  geom_errorbar(aes(ymin = IC_Inf, ymax = IC_Sup), width = 0.2) +
+
+  # Etiqueta de la media
+  geom_text(aes(label = paste("Media:", round(Media, 2)), x = as.numeric(Grupo) + 0.15), 
+            vjust = 0.5, hjust = 0, size = 4, fontface = "bold") +
+
+  # Etiquetas del IC inferior y superior
+  geom_text(aes(y = IC_Inf, label = paste("IC↓", round(IC_Inf, 2))), 
+            vjust = 1.5, size = 3, color = "white") +
+  geom_text(aes(y = IC_Sup, label = paste("IC↑", round(IC_Sup, 2))), 
+            vjust = -0.5, size = 3, color = "#1B5E20") +
+
+  labs(
+    title = "Miembros del hogar según Pobreza Energética",
+    x = "Condición de pobreza energética",
+    y = "Promedio de la cantidad de miembros del hogar",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  ylim(0, max(e_ic$IC_Sup) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.caption = element_text(hjust = 0, size = 9)
+  )
+```
+
+
+Column {data-width=600} 
+-----------------------------------------------------------------------
+
+### T-Test: {data-height=400}
+
+```{r}
+
+# Diccionario de nombres claros
+nombres_amigables <- c(
+  "P1172.02" = "Gasto mensual en electricidad (S/.)",
+  "ingreso_pc_mensual" = "Ingreso per cápita mensual (S/.)",
+  "P208A" = "Edad del jefe/a de hogar",
+  "MIEPERHO" = "Miembros del hogar"
+)
+
+# Variables numéricas
+vars_numericas <- names(nombres_amigables)
+
+# Función corregida
+resultados_ttest <- lapply(vars_numericas, function(var) {
+  t <- t.test(bdt[[var]] ~ bdt$Pobre_energético)
+  media_no_pobre <- as.numeric(t$estimate[1])  # grupo 0
+  media_pobre <- as.numeric(t$estimate[2])     # grupo 1
+
+  data.frame(
+    Variable = nombres_amigables[[var]],
+    `Media No Pobre` = round(media_no_pobre, 2),
+    `Media Pobre` = round(media_pobre, 2),
+    `IC 95% Inferior` = round(t$conf.int[1], 2),
+    `IC 95% Superior` = round(t$conf.int[2], 2),
+    `Valor p` = round(t$p.value, 4)
+  )
+})
+
+# Unir resultados
+tabla_bivariado <- bind_rows(resultados_ttest)
+
+# Mostrar tabla
+tabla_bivariado %>%
+  kable(format = "html", caption = "Comparación de medias según pobreza energética (t-test)") %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = F,
+    position = "center",
+    font_size = 14
+  )
+
+```
+
+### Principales hallazgos: 
+
+1. **Gasto en electricidad:** Los hogares pobres energéticos gastan significativamente menos (S/ 32.01) que los no pobres (S/ 79.55), lo que refleja privación energética.
+
+2. **Ingreso per cápita:** Los hogares pobres energéticos tienen ingresos mucho menores (S/ 697.03 vs. S/ 1860.42), confirmando la relación entre bajos ingresos y pobreza energética.
+
+3. **Edad del jefe/a:** No hay diferencia significativa en la edad promedio entre ambos grupos; esta variable no influye en la pobreza energética.
+
+4. **Número de miembros:** Los hogares pobres energéticos tienen más integrantes (4.45 vs. 3.14), lo que sugiere mayor carga económica.
+
+**EN SÍNTESIS:**
+
+- La pobreza energética está **estrechamente vinculada a factores económicos y demográficos**.
+- Los hogares pobres energéticos tienen **menor ingreso per cápita**, **menor gasto en electricidad** y **más miembros por hogar**.
+- La **edad del jefe/a de hogar no presenta diferencias significativas**, por lo que no sería un factor relevante en este caso.
+
+Categorical Variables vs. PE {.storyboard data-navmenu="Bivariate Analysis" data-icon="fa-solid fa-chart-simple fa-beat-fade" style="color: #f5f3f7;"}
+=====================================  
+
+```{r}
+# Nuevo data frame solo con variables categóricas relevantes
+bdt_cat <- bdt %>%
+ dplyr:: select(
+    Pobre_energético,
+    material_pared,
+    estrato_bin,
+    educacion_basica_completa,
+    inseguridad_alimentaria,
+    sexo_mujer
+  ) %>%
+  mutate(
+    # Recodificar pobreza energética
+    Pobre_energético = factor(Pobre_energético,
+                               levels = c(0, 1),
+                               labels = c("No pobre energético", "Pobre energético")),
+    
+    # Material de pared (ya está en texto, pero lo forzamos a factor para consistencia)
+    material_pared = factor(material_pared,
+                            levels = c("Precario", "Duradero")), 
+    
+    # Estrato binario
+    estrato_bin = factor(estrato_bin,
+                         levels = c("Rural", "Urbano")), 
+    
+    # Educación básica completa
+    educacion_basica_completa = factor(educacion_basica_completa,
+                                       levels = c(0, 1),
+                                       labels = c("No completó", "Sí completó")),
+    
+    # Inseguridad alimentaria
+    inseguridad_alimentaria = factor(inseguridad_alimentaria,
+                                     levels = c(0, 1),
+                                     labels = c("No inseguro", "Inseguro")),
+    
+    # Sexo mujer
+    sexo_mujer = factor(sexo_mujer,
+                        levels = c(0, 1),
+                        labels = c("Hombre", "Mujer"))
+  )
+```
+
+### Material de la pared vs. PE {data-commentary-width=400}
+
+```{r}
+# Agrupar por pobreza energética (VD)
+df_plot <- bdt_cat %>%
+  count(Pobre_energético, material_pared) %>%
+  group_by(material_pared) %>%
+  mutate(
+    prop = n / sum(n),
+    label = paste0(round(prop * 100, 1), "%")
+  )
+
+# Gráfico de barras apiladas por condición de pobreza energética
+ggplot(df_plot, aes(x = material_pared, y = prop, fill = Pobre_energético)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +
+  geom_text(aes(label = label),
+            position = position_fill(vjust = 0.5), color = "white", size = 4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("#B4CDCD", "#7A8B8B")) +
+  labs(
+    title = "Distribución de la pobreza energética según material de la pared",
+    x = "Material de la pared",
+    y = "Porcentaje",
+    fill = "Condición",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.caption = element_text(hjust = 0, size = 9),
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+```
+
+***
+```{r}
+library(gtsummary)
+library(dplyr)
+library(flextable)
+
+# Tabla de contingencia resumida
+tabla <- bdt_cat %>%
+  dplyr::select(Pobre_energético, material_pared) %>%
+  tbl_summary(
+    by = material_pared,
+    label = list(Pobre_energético ~ "Condición"),
+    statistic = list(all_categorical() ~ "{n} ({p}%)"),
+    missing = "no"
+  ) %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_caption("**Distribución de la pobreza energética según material de la pared**")
+
+# Test Chi-cuadrado
+chi_test <- chisq.test(table(bdt_cat$Pobre_energético, bdt_cat$material_pared))
+chi_resultado <- sprintf("Chi-cuadrado = %.2f, gl = %d, valor-p = %.4f",
+                         chi_test$statistic, chi_test$parameter, chi_test$p.value)
+
+# Convertir a flextable y agregar pie de nota
+tabla_flex <- tabla %>%
+  as_flex_table() %>%
+  add_footer_lines(values = chi_resultado)
+
+# Mostrar tabla
+tabla_flex
+
+```
+
+**INTERPRETACIÓN:**
+
+- Existe una **asociación estadísticamente significativa** entre el tipo de material de pared y la pobreza energética.
+
+- Los hogares con **materiales precarios** tienen **mayor probabilidad** de estar en pobreza energética que aquellos con materiales duraderos.
+
+- Esto indica que las **condiciones estructurales de la vivienda** son un **fuerte determinante de vulnerabilidad energética**.
+
+### Estrato Geográfico vs. PE {data-commentary-width=400}
+
+```{r}
+# Agrupar por pobreza energética (VD)
+df_plot <- bdt_cat %>%
+  count(Pobre_energético, estrato_bin) %>%
+  group_by(estrato_bin) %>%
+  mutate(
+    prop = n / sum(n),
+    label = paste0(round(prop * 100, 1), "%")
+  )
+
+# Gráfico de barras apiladas por condición de pobreza energética
+ggplot(df_plot, aes(x = estrato_bin, y = prop, fill = Pobre_energético)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +
+  geom_text(aes(label = label),
+            position = position_fill(vjust = 0.5), color = "white", size = 4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("#9AC0CD", "#68838B")) +
+  labs(
+    title = "Distribución de la pobreza energética según estrato geográfico",
+    x = "Estrato Geográfico",
+    y = "Porcentaje",
+    fill = "Condición",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.caption = element_text(hjust = 0, size = 9),
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+```
+
+***
+
+```{r}
+# Crear tabla ESTRATO
+tabla_estrato <- bdt_cat %>%
+  dplyr::select(Pobre_energético, estrato_bin) %>%
+  tbl_summary(
+    by = estrato_bin,
+    label = list(Pobre_energético ~ "Condición"),
+    statistic = list(all_categorical() ~ "{n} ({p}%)"),
+    missing = "no"
+  ) %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_caption("**Distribución de la pobreza energética según estrato geográfico**")
+
+# Test Chi-cuadrado
+chi_test_estrato <- chisq.test(table(bdt_cat$Pobre_energético, bdt_cat$estrato_bin))
+chi_resultado_estrato <- sprintf("Chi-cuadrado = %.2f, gl = %d, valor-p = %.4f",
+                                 chi_test_estrato$statistic,
+                                 chi_test_estrato$parameter,
+                                 chi_test_estrato$p.value)
+
+# Convertir a flextable y agregar pie con resultado del test
+tabla_estrato_flex <- tabla_estrato %>%
+  as_flex_table() %>%
+  add_footer_lines(values = chi_resultado_estrato)
+
+# Mostrar tabla
+tabla_estrato_flex
+
+```
+
+**INTERPRETACIÓN:**
+
+- Existe una **asociación significativa** entre la zona geográfica (urbano/rural) y la pobreza energética.
+
+- Los hogares **rurales presentan niveles mucho más altos** de pobreza energética que los urbanos.
+
+- Esto se debe probablemente a la **menor cobertura eléctrica**, el **acceso limitado a energía limpia** y la **infraestructura deficiente** en zonas rurales.
+
+### Inseguridad alimentaria vs. PE {data-commentary-width=400}
+    
+```{r}
+# Agrupar por pobreza energética (VD)
+df_plot <- bdt_cat %>%
+  count(Pobre_energético, inseguridad_alimentaria) %>%
+  group_by(inseguridad_alimentaria) %>%
+  mutate(
+    prop = n / sum(n),
+    label = paste0(round(prop * 100, 1), "%")
+  )
+
+# Gráfico de barras apiladas por condición de pobreza energética
+ggplot(df_plot, aes(x = inseguridad_alimentaria, y = prop, fill = Pobre_energético)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +
+  geom_text(aes(label = label),
+            position = position_fill(vjust = 0.5), color = "white", size = 4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("#8DB6CD", "#607B8B")) +
+  labs(
+    title = "Distribución de la pobreza energética según inseguridad alimentaria",
+    x = "Inseguridad Alimentaria",
+    y = "Porcentaje",
+    fill = "Condición",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.caption = element_text(hjust = 0, size = 9),
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+```
+
+***
+    
+```{r}
+
+# Crear tabla
+tabla_inseguridad <- bdt_cat %>%
+  dplyr::select(Pobre_energético, inseguridad_alimentaria) %>%
+  tbl_summary(
+    by = inseguridad_alimentaria,
+    label = list(Pobre_energético ~ "Condición"),
+    statistic = list(all_categorical() ~ "{n} ({p}%)"),
+    missing = "no"
+  ) %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_caption("**Distribución de la pobreza energética según inseguridad alimentaria**")
+
+# Test Chi-cuadrado
+chi_test_inseg <- chisq.test(table(bdt_cat$Pobre_energético, bdt_cat$inseguridad_alimentaria))
+chi_resultado_inseg <- sprintf("Chi-cuadrado = %.2f, gl = %d, valor-p = %.4f",
+                               chi_test_inseg$statistic,
+                               chi_test_inseg$parameter,
+                               chi_test_inseg$p.value)
+
+# Convertir a flextable y agregar pie
+tabla_inseguridad_flex <- tabla_inseguridad %>%
+  as_flex_table() %>%
+  add_footer_lines(values = chi_resultado_inseg)
+
+# Mostrar tabla
+tabla_inseguridad_flex
+
+```
+
+
+**INTERPRETACIÓN:**
+
+- La **inseguridad alimentaria** está fuertemente relacionada con la pobreza energética.
+
+- Los hogares con dificultades para alimentarse tienen una **altísima probabilidad de carecer de acceso adecuado a la energía**.
+
+- Esto refleja una **acumulación de vulnerabilidades multidimensionales** que afecta tanto la alimentación como el consumo energético básico.
+    
+### Educación Básica vs. PE {data-commentary-width=400}
+
+```{r}
+# Agrupar por pobreza energética (VD)
+df_plot <- bdt_cat %>%
+  count(Pobre_energético, educacion_basica_completa) %>%
+  group_by(educacion_basica_completa) %>%
+  mutate(
+    prop = n / sum(n),
+    label = paste0(round(prop * 100, 1), "%")
+  )
+
+# Gráfico de barras apiladas por condición de pobreza energética
+ggplot(df_plot, aes(x = educacion_basica_completa, y = prop, fill = Pobre_energético)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +
+  geom_text(aes(label = label),
+            position = position_fill(vjust = 0.5), color = "white", size = 4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("#A2B5CD", "#6E7B8B")) +
+  labs(
+    title = "Distribución de la pobreza energética según \neducación básica completa",
+    x = "Educación Básica Completa",
+    y = "Porcentaje",
+    fill = "Condición",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.caption = element_text(hjust = 0, size = 9),
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+```
+
+***
+
+```{r}
+
+# Crear tabla resumen
+tabla_educacion <- bdt_cat %>%
+  dplyr::select(Pobre_energético, educacion_basica_completa) %>%
+  tbl_summary(
+    by = educacion_basica_completa,
+    label = list(Pobre_energético ~ "Condición"),
+    statistic = list(all_categorical() ~ "{n} ({p}%)"),
+    missing = "no"
+  ) %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_caption("**Distribución de la pobreza energética según educación básica completa**")
+
+# Calcular Chi-cuadrado
+chi_test_edu <- chisq.test(table(bdt_cat$Pobre_energético, bdt_cat$educacion_basica_completa))
+chi_resultado_edu <- sprintf("Chi-cuadrado = %.2f, gl = %d, valor-p = %.4f",
+                             chi_test_edu$statistic,
+                             chi_test_edu$parameter,
+                             chi_test_edu$p.value)
+
+# Convertir a flextable y agregar resultado del test
+tabla_educacion_flex <- tabla_educacion %>%
+  as_flex_table() %>%
+  add_footer_lines(values = chi_resultado_edu)
+
+# Mostrar tabla
+tabla_educacion_flex
+
+
+```
+
+**INTERPRETACIÓN:**
+
+- Hay una **relación significativa** entre el nivel educativo del jefe/a de hogar y la pobreza energética.
+
+- Los hogares donde el jefe/a **no completó la educación básica** tienen **mayor probabilidad de estar en pobreza energética**.
+
+- Esto refuerza que la **educación es un determinante estructural** del acceso a servicios energéticos adecuados.
+
+Log.Reg. I {data-navmenu="Logistic Regression" data-icon="fa-solid fa-calculator fa-beat-fade"}
+=====================================  
+
+```{r}
+dtr2= read.csv("https://raw.githubusercontent.com/GeraldyAle16/PROYECT_EnergyPoverty/refs/heads/main/ConsolidadoTF2.csv")
+```
+
+```{r}
+dtr2$pared_precaria <- ifelse(dtr2$material_pared == "Precario", 1, 0)
+dtr2$estrato_rural <- ifelse(dtr2$estrato_bin == "Rural", 1, 0)
+names(dtr2)[names(dtr2) == "P208A"] <- "edad_jefe"
+names(dtr2)[names(dtr2) == "MIEPERHO"] <- "miembros_hogar"
+```
+
+
+```{r}
+cordt <- dtr2 %>%
+  dplyr::select(Pobre_energético, gasto_elec_z, ingreso_pc_z, edad_jefe, miembros_hogar, pared_precaria,educacion_basica_completa,estrato_rural,inseguridad_alimentaria,sexo_mujer)
+```
+
+
+Column {data-height=700} {.tabset}
+-----------------------------------------------------------------------
+
+### MATRIZ DE CORRELACIÓN
+```{r}
+## Matriz de correlación (solo mapa de calor y en tamaño reducido)
+
+# Calcular matriz de correlación
+corr <- cor(cordt[, c("Pobre_energético", "gasto_elec_z", "ingreso_pc_z", "edad_jefe", 
+                      "miembros_hogar", "pared_precaria", "educacion_basica_completa", 
+                      "estrato_rural", "inseguridad_alimentaria", "sexo_mujer")],
+            use = "complete.obs")
+
+# Ajustar el tamaño del gráfico (más pequeño para el dashboard)
+par(mar = c(1, 1, 1, 1))  # Márgenes pequeños
+corrplot::corrplot(corr, method = "shade", tl.cex = 0.6, number.cex = 0.6)
+
+```
+
+### REVISIÓN DE LITERATURA
+```{r}
+revi <- glm(
+  Pobre_energético ~ material_pared + gasto_elec_z  + sexo_mujer +
+  P208A + educacion_basica_completa + MIEPERHO +
+  ingreso_pc_z,
+  family = binomial, data = bdt
+) 
+summary (revi)
+```
+
+### MODELOS ANIDADOS
+```{r}
+library(modelsummary)
+```
+
+
+```{r}
+#REGRE 1
+rlog1 <- glm(Pobre_energético ~ ingreso_pc_z + pared_precaria +
+               miembros_hogar + educacion_basica_completa,
+             family = binomial, data = dtr2)
+
+#REGRE2
+rlog2 <- glm(Pobre_energético ~ ingreso_pc_z + pared_precaria +
+               miembros_hogar + educacion_basica_completa + estrato_rural,
+             family = binomial, data = dtr2)
+
+#REGRE3
+rlog3 <- glm(Pobre_energético ~ ingreso_pc_z + pared_precaria +
+               miembros_hogar + educacion_basica_completa + estrato_rural+inseguridad_alimentaria,
+             family = binomial, data = dtr2)
+
+
+modelsrl=list('Ser Pobre Energético  (I)'=rlog1,
+             'Ser Pobre Energético  (II)'=rlog2,
+             'Ser Pobre Energético  (III)'=rlog3)
+
+f <- function(x) format(x, digits = 4, scientific = FALSE)
+modelsummary(
+  modelsrl,
+  fmt = f,
+  exponentiate = TRUE,
+  statistic = "conf.int",
+  stars = TRUE,
+  title = "Regresión Logísticas (Coeficientes Exponenciados)",
+  output = "kableExtra",
+  escape = FALSE
+) %>%
+  kable_styling(
+    full_width = FALSE,
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+
+```
+
+### COMPARACIÓN VISUAL {data-commentary-width=500}
+```{r}
+library(dotwhisker)
+library(broom)
+library(dplyr)
+library(ggplot2)
+
+# Nombres amigables para las variables
+pretty_names <- c(
+  "pared_precaria" = "Pared precaria",
+    "educacion_basica_completa" = "Educación básica completa",
+  "miembros_hogar" = "Miembros del hogar",
+  "ingreso_pc_z" = "Ingreso per cápita (z)",
+  "estrato_rural" = "Zona rural",
+  "inseguridad_alimentaria" = "Inseguridad alimentaria"
+)
+
+# Gráfico ajustado
+dwplot(list(
+  `Modelo I` = rlog1,
+  `Modelo II` = rlog2,
+  `Modelo III` = rlog3
+), exp = TRUE) %>%
+  relabel_predictors(pretty_names) +
+  geom_vline(xintercept = 1, linetype = 2, color = "grey50") +
+  labs(
+    title = "Comparación de Odds Ratios en Modelos Logit",
+    subtitle = "Coeficientes exponenciados con IC del 95%",
+    x = "Odds Ratio (IC 95%)",
+    y = NULL,
+    color = "Modelo"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold", size = 13, hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.text.y = element_text(size = 11)
+  )
+
+```
+
+
+### COEFICIENTES ESTANDARIZADOS
+
+```{r}
+
+# 1. Variables del modelo
+vars_modelo <- c("pared_precaria", "miembros_hogar",
+                 "educacion_basica_completa", 
+                 "estrato_rural", "inseguridad_alimentaria")
+
+# 2. Calcular desviación estándar (excepto ingreso_pc_z)
+sd_vars <- apply(dtr2[, vars_modelo], 2, sd)
+
+# 3. Extraer coeficientes del modelo
+coef_modelo <- coef(rlog3)[c("ingreso_pc_z", vars_modelo)]
+
+# 4. Calcular coeficiente estandarizado:
+# ingreso_pc_z se queda igual porque ya está estandarizado
+coef_estandarizados <- c(
+  ingreso_pc_z = coef_modelo["ingreso_pc_z"],  # ya estandarizado
+  sd_vars * coef_modelo[vars_modelo]
+)
+
+# 5. Crear tabla ordenada
+tabla_coef <- data.frame(
+  Variable = names(coef_estandarizados),
+  Coef_Estandarizado = coef_estandarizados
+)
+
+# 6. Mostrar tabla ordenada por magnitud
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+tabla_coef %>%
+  arrange(desc(abs(Coef_Estandarizado))) %>%
+  kable(caption = "Coeficientes estandarizados del modelo logit final") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+```
+
+***
+**🔍 INTERPRETACIÓN:**
+
+- Las variables con **mayor impacto positivo** en la pobreza energética son:  
+  👉 **Número de miembros del hogar** (+0.57), **pared precaria** (+0.47) y **zona rural** (+0.39).
+
+- Los factores con **mayor efecto protector** son:  
+  👉 **Ingreso per cápita** (−0.55) y **nivel educativo** (−0.33).
+
+- La **inseguridad alimentaria** también incrementa el riesgo (+0.23), aunque con menor peso relativo.
+
+- En conjunto, el modelo muestra que las **condiciones económicas y estructurales del hogar** son los principales determinantes de la pobreza energética en Loreto.
+ 
+
+Row {data-width=500}
+-----------------------------------------------------------------------
+
+### ¿Qué modelo es el mejor? {data-commentary-height=700}
+
+```{r}
+library(lmtest)
+library(knitr)
+library(kableExtra)
+```
+
+```{r}
+# Mostrar tabla
+lrtest(rlog1, rlog2, rlog3) %>%
+  kable(
+    caption = "Tabla 1. Comparación de modelos mediante el test de razón de verosimilitud (LRT)",
+    digits = 4,
+    align = "c",
+    format = "html"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  ) %>%
+  add_header_above(c(" " = 1, "Resultados del test LRT" = 4))
+
+```
+> ***El modelo III es el mejor: es el más parsimonioso y tiene mejor ajuste.***
+
+### CONSIDERACIONES {data-commentary-width=500}
+
+- Las variables con **correlaciones fuertes y significativas** justifican su inclusión en el modelo de regresión.
+
+- El sexo del jefe/a de hogar **no es un predictor significativo** de la pobreza energética en Loreto (*p* = 0.915), a diferencia de lo que sugiere la literatura general.
+
+- El **modelo III es más robusto**, con mejores indicadores globales (AIC, BIC, LogLik).
+
+- El ingreso per cápita, material de vivienda, miembros del hogar, nivel educativo, estrato geográfico e inseguridad alimentaria son **factores significativos** asociados a la pobreza energética.
+
+- Vivir en una vivienda con **paredes precarias** **aumenta en 165 %** la probabilidad de estar en pobreza energética frente a hogares con paredes duraderas (OR = 2.65).
+
+- Residir en **zonas rurales** incrementa en **119 %** la probabilidad de ser pobre energético en comparación con zonas urbanas (OR = 2.19).
+
+- En el modelo logit **se decidió estandarizar únicamente la variable de ingreso per cápita mensual**, dado que presenta una escala numérica amplia (en soles) que difiere significativamente de las demás variables, la mayoría de ellas dicotómicas. 
+
+
+Log.Reg. II {.storyboard data-navmenu="Logistic Regression" data-icon="fa-solid fa-calculator fa-beat-fade"}
+=====================================  
+
+### Evaluando el modelo seleccionado {data-commentary-width=600}
+    
+```{r}
+library(pROC)
+library(caret)
+library(kableExtra)
+library(tidyr)
+```
+
+```{r}
+predicted <- predict(rlog3, newdata = dtr2, type = "response")
+```
+
+
+```{r}
+# 2. Convertir las probabilidades a clases (umbral 0.5)
+predicted_class <- ifelse(predicted > 0.5, 1, 0)
+```
+
+```{r}
+# 3. Convertir a factores para la matriz de confusión
+actuals_factor <- factor(dtr2$Pobre_energético, levels = c(0, 1))
+predicted_factor <- factor(predicted_class, levels = c(0, 1))
+```
+
+```{r}
+# 4. Matriz de confusión
+cm <- confusionMatrix(predicted_factor, actuals_factor, positive = "1")
+```
+
+```{r}
+# 5. Mostrar matriz formateada con kable
+as.data.frame(cm$table) %>%
+  pivot_wider(names_from = Prediction, values_from = Freq) %>%
+  kable(caption = "Matriz de Confusión") %>%
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+cat("
+Area under the curve: 0.8621
+Sensitivity          Specificity       Pos Pred Value       Neg Pred Value        Precision 
+   0.9531250           0.4132841           0.8670569           0.6871166           0.8670569 
+Recall                F1                 Prevalence           Detection Rate       Detection Prevalence 
+   0.9531250           0.9080560           0.8005887           0.7630611           0.8800589 
+Balanced Accuracy 
+   0.6832046
+")
+```
+**🔍 Desempeño del modelo (validación):**
+
+- El modelo **clasifica correctamente al 84.4 %** de los hogares (Accuracy).
+
+- Tiene una **AUC de 0.8621**, lo que indica **muy buena capacidad de discriminación** entre pobres y no pobres energéticos.
+
+- Identifica correctamente al **95.3 % de los hogares pobres energéticos** → **alta sensibilidad**.
+
+- Solo clasifica correctamente al **41.3 % de los hogares no pobres energéticos** → **baja especificidad**.
+
+- En resumen, el modelo es **efectivo para detectar hogares en situación de pobreza energética**, pero tiene limitaciones para identificar a los que no la padecen (datos desbalanceados).
+
+
+***
+```{r}
+# 6. Calcular y graficar curva ROC
+roc_obj <- roc(dtr2$Pobre_energético, predicted)
+plot(roc_obj, main = "Curva ROC", col = "blue", lwd = 2)
+```
+
+```{r, echo=FALSE, results='hide'}
+auc(roc_obj)
+```
+
+```{r, echo=FALSE, results='hide'}
+# Sensibilidad (también llamada Recall o Tasa de verdaderos positivos)
+cm$byClass["Sensitivity"]
+
+# Especificidad (Tasa de verdaderos negativos)
+cm$byClass["Specificity"]
+```
+
+```{r, echo=FALSE, results='hide'}
+cm$byClass
+```
+
+### Efectos marginales {data-commentary-width=600}
+
+```{r, echo=FALSE, results='hide'}
+# interpracion usando marginal effects:
+library(margins)
+```
+
+```{r, echo=FALSE, results='hide'}
+head(predicted)
+```
+
+```{r}
+marginalsData=summary(margins(rlog3)) 
+marginalsData%>% kable(caption = "Efectos Marginales Promedio (AME)- Modelo III") %>%kableExtra::kable_styling(full_width = T)
+```
+
+**🔍 Efectos marginales promedio (AMEs): **
+
+- Tener **pared precaria** incrementa la probabilidad de pobreza energética en **10.7 puntos porcentuales**.
+
+- Vivir en **zona rural** aumenta la probabilidad en **8.6 puntos porcentuales**, respecto a zonas urbanas.
+
+- La **inseguridad alimentaria** eleva el riesgo en **6.5 puntos porcentuales**.
+
+- Cada **miembro adicional en el hogar** incrementa la probabilidad de pobreza energética en **2.7 puntos porcentuales**.
+
+- Un aumento de una **desviación estándar en el ingreso per cápita** reduce la probabilidad en **6.0 puntos porcentuales**.
+
+- Haber **completado la educación básica** disminuye el riesgo en **7.5 puntos porcentuales**.
+
+***
+
+```{r}
+ggplot(marginalsData, aes(x = reorder(factor, AME), y = AME)) +
+  geom_point(size = 3, color = "#0072B2") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, color = "#0072B2") +
+  geom_text(aes(label = round(AME, 3)), hjust = -0.2, size = 3.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  coord_flip() +
+  labs(
+    title = "Efectos Marginales Promedio (AME) \nModelo III",
+    x = "Variables del modelo",
+    y = "AME"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+
+EFA {data-icon="fa-solid fa-atom" style="color: #fcfaff;"}
+=====================================  
+
+Column {data-width=400} {.tabset}
+-----------------------------------------------------------------------
+
+```{r, echo=FALSE, results='hide'}
+str(bdt)
+```
+
+
+```{r, echo=FALSE, results='hide'}
+dontselect=c("CONGLOME","VIVIENDA","HOGAR",
+             "UBIGEO", "puntaje", "P101", "P102","P1172.02","P207",  "P208A","P301A", "MIEPERHO", "Pobre_energético", "ESTRATO", "ingreso_pc_mensual", "inseguridad_alimentaria" , "sexo_mujer", "educacion_basica_completa", "material_pared", "ingreso_pc_z", "gasto_elec_z", "distrito", "provincia", "provincia_ubigeo", "estrato_bin" )
+select=setdiff(names(bdt),dontselect) 
+theData=bdt[,select]
+
+# usaremos:
+library(magrittr)
+head(theData,10)%>%
+    rmarkdown::paged_table()
+```
+
+
+###  CORRELACIÓN {data-commentary-width=400}
+
+```{r, echo=FALSE, results='hide'}
+library(polycor)
+corMatrix=polycor::hetcor(theData)$correlations
+```
+
+```{r, echo=FALSE, results='hide'}
+round(corMatrix,2)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(ggcorrplot)
+
+ggcorrplot(corMatrix)
+```
+
+
+### VERIFICACIÓN {data-commentary-width=400}
+
+**Test de Kaiser-Meyer-Olkin (KMO)**
+```{r}
+library(psych)
+psych::KMO(corMatrix) 
+```
+***
+
+**MATRIZ IDENTIDAD BARTLETT**
+```{r}
+cortest.bartlett(corMatrix,n=nrow(theData))$p.value>0.05
+```
+
+***
+**SINGULARIDAD DE MATRIZ**
+```{r}
+library(matrixcalc)
+
+is.singular.matrix(corMatrix)
+```
+
+***
+**NÚMERO DE FACTORES**
+```{r}
+set.seed(2024)
+fa.parallel(theData, fa = 'fa',correct = T,plot = F)
+```
+
+
+### REDIMENSIONAMOS # DE FACTORES {data-commentary-width=400}
+
+```{r, echo=FALSE, results='hide'}
+library(GPArotation)
+resfa <- fa(theData,
+            nfactors = 3,
+            cor = 'mixed',
+            rotate = "varimax", #oblimin?
+            fm="minres")
+print(resfa$loadings)
+```
+
+**RESULTADO MEJORADO (ES MÁS DE UN FACTOR)**
+```{r}
+print(resfa$loadings,cutoff = 0.5)
+```
+
+**🔍 Dimensiones latentes y varianza explicada (AFE)**
+
+1. **MR1 – Uso moderno de la energía**: Agrupa privaciones en **entretenimiento, iluminación y electrodomésticos**, y explica el **36.1 %** de la varianza. Representa el acceso a **servicios domésticos y confort energético**.
+
+2. **MR2 – Subsistencia energética básica**: Refleja la **privación en cocina**, con una única carga fuerte. Explica el **21.3 %** de la varianza, vinculada a **necesidades energéticas fundamentales**.
+
+3. **MR3 – Conectividad tecnológica**: Se asocia a la **privación en comunicación**. Explica el **14.0 %** de la varianza y representa el componente de **acceso a tecnologías y conectividad**.
+
+Los tres factores explican el **71.4 %** de la varianza total, lo cual es considerado **aceptable** para AFE.
+
+### RESULTADO VISUAL {data-commentary-width=400}
+```{r, echo=FALSE, fig.width=8, fig.height=6}
+fa.diagram(resfa,main = "Resultados del EFA")
+```
+
+### EVALUACIÓN DE RESULTADO {data-commentary-width=400}
+
+**¿Qué variables aportaron más a los factores?**
+```{r}
+sort(resfa$communality)
+```
+***
+**¿Qué variables contribuyen a la construcción de más de un factor?**
+```{r}
+sort(resfa$complexity)
+```
+***
+**¿Tucker Lewis > 0.9?**
+```{r}
+resfa$TLI
+```
+***
+**¿RMS cerca a cero?**
+```{r}
+resfa$rms
+```
+
+```{r, echo=FALSE, results='hide'}
+resfa$RMSEA
+```
+
+```{r, echo=FALSE, results='hide'}
+resfa$BIC
+```
+
+```{r, echo=FALSE, results='hide'}
+##OBTENCIÓN DE ÍNDICES
+as.data.frame(resfa$scores)%>%head()
+```
+
+
+```{r, echo=FALSE, results='hide'}
+bdt$Privación_selectr=resfa$scores[,1]
+bdt$Privación_combus=resfa$scores[,2]
+bdt$Privación_conect=resfa$scores[,3]
+```
+
+```{r, echo=FALSE, results='hide'}
+cor(bdt$Privación_selectr,bdt$Privación_combus)
+```
+
+
+Column {data-width=800} 
+-----------------------------------------------------------------------
+
+### Análisis Factorial Exploratorio (AFE) {data-height=580} 
+    
+- Las correlaciones entre los indicadores son adecuadas: **no hay multicolinealidad perfecta**, pero sí relación suficiente para el análisis.
+
+- El **índice KMO general es 0.76**, considerado **bueno**, lo que confirma la pertinencia del AFE.
+
+- Todos los indicadores tienen **KMO individuales ≥ 0.74**, por lo que **todos aportan significativamente al modelo**.
+
+- La **prueba de esfericidad de Bartlett es significativa**, lo que indica que existen correlaciones sustanciales entre variables → AFE justificado.
+
+- El análisis paralelo sugiere **3 factores latentes**, lo que indica que las privaciones energéticas se organizan en **tres dimensiones estructuradas**.
+
+- La matriz no presentó problemas de singularidad, y el análisis paralelo sugirió la existencia de tres factores.
+    
+### Estructura factorial identificada
+
+1. **Factor 1 (MR1)**: Agrupa privaciones en **entretenimiento (0.714)**, **iluminación (0.686)** y **electrodomésticos (0.681)** → representa el **uso moderno de la energía y confort doméstico**.
+
+2. **Factor 2 (MR2)**: Dominado por la privación en **cocina moderna (0.759)** → refleja una dimensión de **subsistencia energética básica**.
+
+3. **Factor 3 (MR3)**: Asociado a la privación en **comunicación (0.583)** → expresa una dimensión de **conectividad y acceso a tecnología**.
+
+**EN SUMA**: El AFE valida empíricamente el enfoque multidimensional del estudio (MEPI), al mostrar que la pobreza energética **no es un fenómeno homogéneo**, sino que está compuesta por **múltiples privaciones diferenciadas**.
+
+
+Cluster Analysis {data-icon="fa-solid fa-bezier-curve" style="color: #f5f5f5;"}
+=====================================  
+
+```{r, echo=FALSE, results='hide'}
+datse <- bdt %>%
+  select(UBIGEO,CONGLOME, VIVIENDA,HOGAR, provincia,distrito,privacion_cocina, privacion_ilumina, privacion_comuni, privacion_electro, privacion_entreteni)
+```
+
+```{r, echo=FALSE, results='hide'}
+# Agrupar por distrito y calcular promedios
+
+datse_distrito <- datse %>%
+  group_by(distrito) %>%
+  summarise(
+    prop_cocina     = mean(privacion_cocina, na.rm = TRUE),
+    prop_ilumina    = mean(privacion_ilumina, na.rm = TRUE),
+    prop_comuni     = mean(privacion_comuni, na.rm = TRUE),
+    prop_electro    = mean(privacion_electro, na.rm = TRUE),
+    prop_entreteni  = mean(privacion_entreteni, na.rm = TRUE)
+  )
+```
+
+```{r, echo=FALSE, results='hide'}
+cor(datse_distrito[,c(2:6)])
+```
+
+```{r, echo=FALSE, results='hide'}
+dataClus <- as.data.frame(datse_distrito[, 2:6])
+row.names(dataClus) <- datse_distrito$distrito
+```
+
+```{r, echo=FALSE, results='hide'}
+library(cluster)
+g.dist = daisy(dataClus, metric="gower")
+```
+
+
+Column {data-width=400} {.tabset}
+-----------------------------------------------------------------------
+### # ÓPTIMO DE CLUSTERS (PAM)
+
+```{r}
+library(factoextra)
+fviz_nbclust(dataClus, pam,diss=g.dist,method = "gap_stat",k.max = 10,verbose = F)
+```
+
+
+```{r, echo=FALSE, results='hide'}
+library(kableExtra)
+set.seed(123)
+res.pam=pam(g.dist,5,cluster.only = F)
+
+#nueva columna
+dataClus$pam=res.pam$cluster
+
+# ver
+
+head(dataClus,15)%>%kbl()%>%kable_styling()
+```
+
+
+### SILUETA DE CLUSTERS
+
+```{r}
+fviz_silhouette(res.pam,print.summary = F)
+```
+
+### DISTRITOS
+
+```{r, echo=FALSE, results='hide'}
+library(magrittr)
+```
+
+```{r, echo=FALSE, results='hide'}
+silPAM=data.frame(res.pam$silinfo$widths)
+silPAM$distrito=row.names(silPAM)
+poorPAM=silPAM[silPAM$sil_width<0,'distrito']%>%sort()
+poorPAM
+```
+```{r, echo=FALSE, results='hide'}
+aggregate(.~ pam, data=dataClus,mean)
+```
+
+```{r, echo=FALSE, results='hide'}
+original=aggregate(.~ pam, data=dataClus,mean)
+original[order(original$prop_cocina),]
+```
+
+```{r, echo=FALSE, results='hide'}
+dataClus$pam=dplyr::recode(dataClus$pam, `4` = 1, `3`=2,`2`=3,`1`=4, `5`=5)
+```
+
+```{r, echo=FALSE, results='hide'}
+aggregate(.~ pam, data=dataClus,mean)
+```
+
+
+```{r, echo=FALSE, results='hide'}
+datse_distrito$pamIPEpoor=datse_distrito$distrito%in%poorPAM
+datse_distrito$pamIPE=as.ordered(dataClus$pam)
+dataClus$pam=NULL
+```
+
+```{r, echo=FALSE, results='hide'}
+# k es la cantidad de dimensiones
+proyeccion = cmdscale(g.dist, k=2,add = T) 
+head(proyeccion$points,20)
+```
+
+```{r, echo=FALSE, results='hide'}
+####GRAFICAMOS
+
+datse_distrito$dim1 <- proyeccion$points[,1]
+datse_distrito$dim2 <- proyeccion$points[,2]
+```
+
+```{r, echo=FALSE, results='hide'}
+library(ggrepel)
+```
+
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+
+ggplot(datse_distrito, aes(x = dim1, y = dim2, label = row.names(dataClus))) +
+  geom_text_repel(size = 3, max.overlaps = 100, min.segment.length = unit(0, 'lines')) +
+  theme_minimal() +
+  labs(
+    x = "Dimensión 1 (45% varianza explicada)",
+    y = "Dimensión 2 (25% varianza explicada)",
+    title = "Distribución de distritos según dimensiones latentes"
+  )
+```
+
+
+### DISTRITOS II
+
+```{r}
+# solo distritos mal clusterizados
+PAMlabels=ifelse(datse_distrito$pamIPEpoor,datse_distrito$distrito,'')
+
+#base
+base= ggplot(datse_distrito,aes(x=dim1, y=dim2))  +
+    scale_color_brewer(type = 'qual',palette ='Dark2'  ) + labs(subtitle = "Se destacan los distritos mal clusterizados")
+
+pamPlot=base + geom_point(size=3, 
+                          aes(color=pamIPE))  + 
+        labs(title = "PAM") 
+# hacer notorios los paises mal clusterizados
+pamPlot + geom_text_repel(size=4,
+                          aes(label=PAMlabels),
+                          max.overlaps = 50,
+                          min.segment.length = unit(0, 'lines'))
+```
+
+
+Column {data-width=600}
+-----------------------------------------------------------------------
+### Análisis de clúster PAM (por distrito)
+    
+- Se aplicó la técnica **Partitioning Around Medoids (PAM)** usando las privaciones del MEPI por distrito (cocina, iluminación, comunicación, electrodomésticos y entretenimiento), con valores entre 0 y 1.
+
+- Para medir la disimilitud entre distritos se usó la **distancia de Gower**, adecuada para variables normalizadas y de distinta naturaleza.
+
+- La **estadística de la brecha (Gap Statistic)** determinó que el número óptimo de grupos es **k = 5**.
+
+- El **coeficiente de silueta promedio fue 0.29**, lo que indica una **estructura de agrupamiento razonable**, con buena cohesión en los clústeres 1, 3, 4 y 5.
+
+- Aunque el Clúster 2 presentó mayor dispersión y un caso mal asignado (Teniente César López Rojas), la **mayoría de los distritos presentan valores positivos**, lo que **valida la segmentación**.
+
+    
+### Interpretación
+
+**🔍 Perfiles distritales por clúster (PAM)**
+
+1. **Clúster 1 – Bajo nivel de privación:**  
+   Distritos con **mejor acceso general** a servicios, destacando en iluminación (3.9 %) y comunicación (7.0 %). Incluye Iquitos y otras capitales distritales.  
+   → *“Localidades de Alto Acceso / Baja Privación”*
+
+2. **Clúster 2 – Alta privación en cocina y electricidad:**  
+   Muy limitada cobertura en cocina (87.2 %) y electricidad (72.5 %), pero con mejor acceso en otros servicios.  
+   → *“Alta Privación en Cocina y Electricidad, Acceso Moderado a Otros”*
+
+3. **Clúster 3 – Alta privación energética, pero mejor en iluminación:**  
+   Alta carencia en cocina (89.3 %) y electricidad (84.6 %), pero con **niveles más aceptables de iluminación y entretenimiento**.  
+   → *“Alta Privación en Cocina y Electricidad, Mejor en Iluminación y Entretenimiento”*
+
+4. **Clúster 4 – Privación severa y extendida:**  
+   Casi total privación en cocina (97.3 %) y niveles altos en todas las demás dimensiones.  
+   → *“Privación Muy Alta en Cocina y Generalizada”*
+
+5. **Clúster 5 – Extrema privación en todos los servicios:**  
+   Privaciones superiores al 90 % en cocina, electricidad e iluminación. Son las comunidades **más vulnerables del territorio**.  
+   → *“Localidades de Extrema Privación General”*
+
+
+
+Conclusion {data-icon="fa-solid fa-bolt fa-beat-fade" style="color: #fafafa;"}
+=====================================  
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+### PRINCIPALES HALLAZGOS 
+    
+**🔍 Conclusiones principales del estudio**
+
+- 🏠 **La pobreza energética en Loreto está determinada por múltiples factores estructurales:**  
+  Hogares con **paredes precarias**, ubicados en **zonas rurales**, con **inseguridad alimentaria** y **familias numerosas** tienen una **probabilidad significativamente mayor** de experimentar pobreza energética.
+
+- 📉 **El ingreso y la educación protegen:**  
+  Un **mayor ingreso per cápita** y haber completado la **educación básica** disminuyen de forma importante el riesgo, confirmando el peso del **capital económico y humano** en el acceso a la energía.
+
+- 📊 **El modelo predictivo funcionó con alta precisión:**  
+  Con una **AUC de 0.86** y **sensibilidad del 95.3 %**, el modelo permite **identificar con eficacia a los hogares vulnerables**, útil para mejorar la **focalización de subsidios**.
+
+- 🧩 **La pobreza energética no es homogénea:**  
+  El análisis factorial reveló **3 dimensiones distintas** de privación energética: *confort moderno*, *subsistencia básica* y *conectividad*. No todos los hogares carecen de lo mismo.
+
+- 🗺️ **Los distritos loretanos tienen perfiles energéticos diferenciados:**  
+  El análisis de clúster permitió identificar **5 grupos territoriales**, desde Iquitos y Punchana con alta cobertura, hasta Cahuapanas y Trompeteros en privación extrema → se requiere **política energética diferenciada por territorio**.
+
+- 🛠️ **Se necesita una política energética más integral y territorializada:**  
+  La pobreza energética en Loreto **no se resuelve solo ampliando cobertura eléctrica**. Se requiere una estrategia que **integre vivienda, ingresos, educación y territorio**, adaptada a los diferentes perfiles distritales identificados.
+
+   
+Row {data-width=500}
+-----------------------------------------------------------------------
+ 
+### RECOMENDACIONES
+
+1. **Revisar los criterios de focalización del FISE**  
+   Los resultados del estudio sugieren que el criterio actual del **Fondo de Inclusión Social Energético (≤70 kWh y tenencia de cocina a gas)** podría excluir a hogares pobres energéticos.  
+   👉 Se recomienda incorporar **criterios multidimensionales** basados en privaciones energéticas y condiciones socioeconómicas:  
+   - Material de la vivienda  
+   - Número de miembros del hogar  
+   - Nivel educativo del jefe/a de hogar
+
+2. **Diseñar estrategias diferenciadas por clúster territorial**  
+   El análisis de clúster mostró una **heterogeneidad marcada** entre distritos loretanos.  
+   👉 Se recomienda que el **Ministerio de Energía y Minas**, junto a los gobiernos regionales y locales, implemente **intervenciones adaptadas** según perfil distrital:  
+   - Desde zonas de **alta privación estructural**  
+   - Hasta zonas en **transición energética**
+
+3. **Impulsar programas de mejora habitacional con enfoque energético**  
+   La fuerte asociación entre **materiales precarios y pobreza energética** exige políticas integrales de vivienda.  
+   👉 Se sugiere promover mejoras en:  
+   - Aislamiento térmico  
+   - Instalaciones eléctricas seguras  
+   - Condiciones para uso de energía limpia
+
+4. **Articular políticas de energía con programas sociales existentes**  
+   La **inseguridad alimentaria** también predice pobreza energética.  
+   👉 Se recomienda integrar programas como **Juntos** con iniciativas de acceso a energía, promoviendo intervenciones **intersectoriales** que ataquen múltiples dimensiones de la pobreza.
+
+5. **Fortalecer capacidades locales y participación comunitaria**  
+   En zonas rurales, se requiere mejorar la **gestión energética territorial**.  
+   👉 Se propone:  
+   - Capacitar a gobiernos locales en planificación energética  
+   - Incluir a las comunidades en el diseño de soluciones energéticas **cultural y territorialmente apropiadas**
+   
+### 
+
+```{r}
+knitr::include_graphics("https://raw.githubusercontent.com/GeraldyAle16/PROYECT_EnergyPoverty/refs/heads/main/IMAGEN%20PE.jpg") 
+```
+
