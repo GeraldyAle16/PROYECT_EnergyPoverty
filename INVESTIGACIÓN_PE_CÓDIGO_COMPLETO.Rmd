@@ -1,0 +1,1705 @@
+---
+title: "INVEST_PE"
+author: "Geraldy Rojas"
+date: "2025-06-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## LIBRERÍAS
+
+```{r}
+# 📂 Importación y lectura de datos
+library(rio)         # Importación/exportación en múltiples formatos
+library(readr)       # Lectura eficiente de .csv
+library(readxl)      # Lectura de archivos Excel
+
+# 🧹 Manipulación y transformación de datos
+library(dplyr)       # Manipulación de datos (filter, mutate, etc.)
+library(tidyr)       # Transformación (pivot, unnest, etc.)
+library(tibble)      # Tibble como data.frame moderno
+library(labelled)    # Manejo de etiquetas (valores y variables)
+library(tidyverse)   # Conjunto completo de paquetes integrados
+
+# 📊 Visualización de datos
+library(ggplot2)     # Gráficos base
+library(ggthemes)    # Temas adicionales para ggplot
+library(scales)      # Escalas numéricas (ejes)
+library(ggdist)      # Visualización de distribuciones
+library(GGally)      # Matrices de correlación, etc.
+library(corrplot)    # Correlación visual
+library(plotly)      # Gráficos interactivos
+library(patchwork)   # Combinar gráficos ggplot
+library(gridExtra)   # Organización de gráficos
+
+# 📈 Análisis estadístico y modelos
+library(broom)       # Limpieza y resumen de modelos
+library(caret)       # Validación y evaluación de modelos
+library(performance) # Métricas de desempeño
+library(PerformanceAnalytics)  # Análisis financiero/estadístico
+library(nortest)     # Tests de normalidad
+library(moments)     # Asimetría y curtosis
+
+# 🔎 Análisis multivariado (Factorial / Clúster)
+library(FactoMineR)       # Análisis factorial
+library(factoextra)       # Visualización de resultados multivariados
+library(FactoInvestigate) # Análisis detallado de factores
+library(NbClust)          # Determinar número óptimo de clústeres
+
+# 📋 Reportes y tabulados
+library(knitr)        # Salida en R Markdown
+library(kableExtra)   # Tablas con formato en HTML/PDF
+library(gtsummary)    # Tablas de regresión y estadísticas descriptivas
+
+```
+
+```{r}
+bdt= read.csv("https://raw.githubusercontent.com/GeraldyAle16/PROYECT_EnergyPoverty/refs/heads/main/ConsolidadoTF2.csv")
+```
+
+```{r}
+str(bdt)
+```
+## ANÁLISIS UNIVARIADO
+```{r}
+bdt %>%
+  count(Pobre_energético) %>%
+  mutate(
+    Categoría = ifelse(Pobre_energético == 1, "Pobre energético", "No pobre energético"),
+    Porcentaje = paste0(round(100 * n / sum(n), 1), "%")
+  ) %>%
+  select(Categoría, Frecuencia = n, Porcentaje) %>%
+  kable(format = "html", caption = "Distribución de hogares según Pobreza Energética") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = F, position = "center", font_size = 14)
+
+```
+
+```{r}
+
+# Tabla de datos con porcentaje y etiquetas
+tabla_pe <- bdt %>%
+  count(Pobre_energético) %>%
+  mutate(
+    Categoria = factor(Pobre_energético, labels = c("No Pobre Energético", "Pobre Energético")),
+    Porcentaje = round(100 * n / sum(n), 1),
+    Etiqueta = paste0(n, " (", Porcentaje, "%)")
+  )
+
+# Gráfico final
+ggplot(tabla_pe, aes(x = Categoria, y = n)) +
+  geom_bar(stat = "identity", fill = "#5CC0C0", width = 0.6) +
+  geom_text(aes(label = Etiqueta), vjust = -0.5, size = 4.2) +
+  theme_minimal() +
+  labs(
+    title = "Distribución de la Pobreza Energética",
+    x = "Condición del hogar",
+    y = "Frecuencia",
+    caption = "Encuesta Nacional de Hogares (ENAHO) - 2024, INEI Perú.\nElaboración propia."
+  ) +
+  ylim(0, max(tabla_pe$n) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.caption = element_text(hjust = 0, size = 9, margin = margin(t = 10))
+  )
+
+
+```
+
+#VARIABLES NUMÉRICAS 
+```{r}
+
+# Seleccionar las variables
+vars_numericas <- bdt %>%
+  select(
+    `Gasto mensual electricidad` = P1172.02,
+    `Ingreso per cápita mensual` = ingreso_pc_mensual,
+    `Edad del jefe/a de hogar` = P208A,
+    `Número de miembros del hogar` = MIEPERHO
+  )
+
+# Calcular resumen con nombres únicos
+resumen_multi <- vars_numericas %>%
+  summarise(across(everything(), list(
+    Media = ~mean(., na.rm = TRUE),
+    Mediana = ~median(., na.rm = TRUE),
+    SD = ~sd(., na.rm = TRUE),
+    Mínimo = ~min(., na.rm = TRUE),
+    Q1 = ~quantile(., 0.25, na.rm = TRUE),
+    Q3 = ~quantile(., 0.75, na.rm = TRUE),
+    Máximo = ~max(., na.rm = TRUE),
+    IC_95_inf = ~mean(.) - qt(0.975, df = sum(!is.na(.)) - 1) * sd(.) / sqrt(sum(!is.na(.))),
+    IC_95_sup = ~mean(.) + qt(0.975, df = sum(!is.na(.)) - 1) * sd(.) / sqrt(sum(!is.na(.)))
+  ), .names = "{.col}_{.fn}")) %>%
+  pivot_longer(everything(), names_to = c("Variable", "Estadístico"), names_sep = "_", values_to = "Valor") %>%
+  pivot_wider(names_from = Variable, values_from = Valor) %>%
+  rename(`Estadístico` = Estadístico)
+
+# Mostrar tabla
+resumen_multi %>%
+  kable(format = "html", digits = 2,
+        caption = "Estadísticos descriptivos de variables numéricas seleccionadas") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = F, position = "center", font_size = 13)
+
+
+
+```
+#GASTO ELÉCTRICO MENSUAL
+
+```{r}
+# Boxplot
+g1 <- ggplot(bdt, aes(y = P1172.02)) +
+  geom_boxplot(fill = "#43a047") +
+  labs(title = "Boxplot del gasto mensual en electricidad", y = "Soles (S/.)") +
+  theme_minimal() + labs(caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia.") +
+theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+      plot.caption = element_text(hjust = 0, size = 9))
+
+# Opcional: para combinarlos
+g1
+
+```
+#INGRESO PER CÁPITA MENSUAL
+```{r}
+g2 <-  ggplot(bdt, aes(y = ingreso_pc_mensual)) +
+  geom_boxplot(fill = "#43a047") +
+  labs(title = "Boxplot del ingreso per cápita mensual", y = "Soles (S/.)") +
+  theme_minimal() + labs(caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia.") +
+theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+      plot.caption = element_text(hjust = 0, size = 9))
+g2
+
+```
+
+#EDAD
+```{r}
+g3= ggplot(bdt, aes(x = P208A)) +
+  geom_histogram(fill = "#43a047", color = "white", binwidth = 5) +
+  labs(title = "Distribución de la edad del jefe/a de hogar",
+       x = "Edad (años)", y = "Frecuencia") +
+  theme_minimal() + labs(caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia.") +
+theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+      plot.caption = element_text(hjust = 0, size = 9))
+g3
+
+```
+
+#MIEMBROS DEL HOGAR
+
+```{r}
+g4 = ggplot(bdt, aes(x = factor(MIEPERHO))) +
+  geom_bar(fill = "#43a047") +
+  labs(title = "Frecuencia del número de miembros del hogar",
+       x = "Número de personas", y = "Frecuencia") +
+  theme_minimal() + labs(caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia.") +
+theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+      plot.caption = element_text(hjust = 0, size = 9))
+g4
+
+```
+####PARA PATCHWORK####
+
+```{r}
+library(ggplot2)
+library(patchwork)
+
+# Gráfico 1: Gasto mensual en electricidad (NO estandarizado)
+gA <- ggplot(bdt, aes(y = P1172.02)) +
+  geom_boxplot(fill = "#43a047") +
+  labs(
+    title = "Boxplot del gasto mensual en electricidad",
+    y = "Soles (S/.)",
+    
+  ) +
+  theme_minimal(base_size = 8) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 8),
+    plot.caption = element_text(hjust = 0, size = 10)
+  )
+
+# Gráfico 2: Ingreso per cápita mensual (NO estandarizado)
+gB <- ggplot(bdt, aes(y = ingreso_pc_mensual)) +
+  geom_boxplot(fill = "#43a047") +
+  labs(
+    title = "Boxplot del ingreso per cápita mensual",
+    y = "Soles (S/.)",
+    
+  ) +
+  theme_minimal(base_size = 8) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 8),
+    plot.caption = element_text(hjust = 0, size = 10)
+  )
+
+# Gráfico 3: Edad del jefe/a de hogar
+gC <- ggplot(bdt, aes(x = P208A)) +
+  geom_histogram(fill = "#43a047", color = "white", binwidth = 5) +
+  labs(
+    title = "Distribución de la edad del jefe/a de hogar",
+    x = "Edad (años)", y = "Frecuencia",
+    
+  ) +
+  theme_minimal(base_size = 8) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 8),
+    plot.caption = element_text(hjust = 0, size = 10)
+  )
+
+# Gráfico 4: Miembros del hogar
+gD <- ggplot(bdt, aes(x = factor(MIEPERHO))) +
+  geom_bar(fill = "#43a047") +
+  labs(
+    title = "Frecuencia del número de miembros del hogar",
+    x = "Número de personas", y = "Frecuencia",
+   
+  ) +
+  theme_minimal(base_size = 8) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 8),
+    plot.caption = element_text(hjust = 0, size = 10)
+  )
+
+```
+
+
+```{r}
+# Combinar los 4 gráficos (2 filas, 2 columnas)
+(gA + gB) / (gC + gD) +
+  plot_annotation(
+    title = "Distribución de variables numéricas seleccionadas",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia.",
+    theme = theme(
+      plot.title = element_text(hjust = 0.55, size = 16, face = "bold"),
+      plot.caption = element_text(hjust = 0, size = 10)
+    )
+  ) 
+
+
+
+```
+
+#VARIABLES CATEGÓRICAS / BINARIAS
+
+#MATERIAL PARED
+
+```{r}
+bdt %>%
+  filter(!is.na(material_pared)) %>%
+  count(material_pared) %>%
+  mutate(
+    Porcentaje = paste0(round(100 * n / sum(n), 1), "%")
+  ) %>%
+  rename(Categoría = material_pared, Frecuencia = n) %>%
+  kable(format = "html", caption = "Distribución de hogares según material predominante de pared") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = F, position = "center", font_size = 14)
+
+```
+
+```{r}
+# Tabla de datos con porcentaje MATERIAL
+tabla_m <- bdt %>%
+  count(material_pared) %>%
+  mutate(
+    Categoria = factor(material_pared, labels = c("Duradero", "Precario")),
+    Porcentaje = round(100 * n / sum(n), 1),
+    Etiqueta = paste0(n, " (", Porcentaje, "%)")
+  )
+
+# Gráfico final
+ggplot(tabla_m, aes(x = Categoria, y = n)) +
+  geom_bar(stat = "identity", fill = "#86D0B9", width = 0.6) +
+  geom_text(aes(label = Etiqueta), vjust = -0.5, size = 4.2) +
+  theme_minimal() +
+  labs(
+    title = "Distribución de hogares según material predominante de pared",
+    x = "Material del hogar",
+    y = "Frecuencia",
+    caption = "Encuesta Nacional de Hogares (ENAHO) - 2024, INEI Perú.\nElaboración propia."
+  ) +
+  ylim(0, max(tabla_pe$n) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.caption = element_text(hjust = 0, size = 9, margin = margin(t = 10))
+  )
+```
+
+
+#EDUCACIÓN
+```{r}
+bdt %>%
+  count(educacion_basica_completa) %>%
+  mutate(
+    Categoría = ifelse(educacion_basica_completa == 1, "Tiene educación básica completa", "No tiene educación básica completa"),
+    Porcentaje = paste0(round(100 * n / sum(n), 1), "%")
+  ) %>%
+  select(Categoría, Frecuencia = n, Porcentaje) %>%
+  kable(format = "html", caption = "Distribución de hogares según educación básica completa") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = F, position = "center", font_size = 14)
+```
+
+```{r}
+# Tabla de datos con porcentaje EDUCACIÓN
+tabla_e <- bdt %>%
+  count(educacion_basica_completa) %>%
+  mutate(
+    Categoria = factor(educacion_basica_completa, labels = c("Sí", "No")),
+    Porcentaje = round(100 * n / sum(n), 1),
+    Etiqueta = paste0(n, " (", Porcentaje, "%)")
+  )
+
+# Gráfico final
+ggplot(tabla_e, aes(x = Categoria, y = n)) +
+  geom_bar(stat = "identity", fill = "#7ECDBB", width = 0.6) +
+  geom_text(aes(label = Etiqueta), vjust = -0.5, size = 4.2) +
+  theme_minimal() +
+  labs(
+    title = "Distribución de hogares según Educación Básica Completa",
+    x = "Educación Básica Completa",
+    y = "Frecuencia",
+    caption = "Encuesta Nacional de Hogares (ENAHO) - 2024, INEI Perú.\nElaboración propia."
+  ) +
+  ylim(0, max(tabla_pe$n) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.caption = element_text(hjust = 0, size = 9, margin = margin(t = 10))
+  )
+```
+
+#ESTRATO
+```{r}
+bdt %>%
+  filter(!is.na(estrato_bin)) %>%
+  count(estrato_bin) %>%
+  mutate(
+    Porcentaje = paste0(round(100 * n / sum(n), 1), "%")
+  ) %>%
+  rename(Categoría = estrato_bin, Frecuencia = n) %>%
+  kable(format = "html", caption = "Distribución de hogares según estrato geográfico") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = F, position = "center", font_size = 14)
+```
+
+```{r}
+# Tabla de datos con porcentaje ESTRATO
+tabla_s <- bdt %>%
+  count(estrato_bin) %>%
+  mutate(
+    Categoria = factor(estrato_bin, labels = c("Urbano", "Rural")),
+    Porcentaje = round(100 * n / sum(n), 1),
+    Etiqueta = paste0(n, " (", Porcentaje, "%)")
+  )
+
+# Gráfico final
+ggplot(tabla_s, aes(x = Categoria, y = n)) +
+  geom_bar(stat = "identity", fill = "#CCEBD1", width = 0.6) +
+  geom_text(aes(label = Etiqueta), vjust = -0.5, size = 4.2) +
+  theme_minimal() +
+  labs(
+    title = "Distribución de hogares según Estrato Geográfico",
+    x = "Estrato Geográfico",
+    y = "Frecuencia",
+    caption = "Encuesta Nacional de Hogares (ENAHO) - 2024, INEI Perú.\nElaboración propia."
+  ) +
+  ylim(0, max(tabla_pe$n) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.caption = element_text(hjust = 0, size = 9, margin = margin(t = 10))
+  )
+```
+
+#INSEGURIDAD ALIMENTARIA
+```{r}
+bdt %>%
+  count(inseguridad_alimentaria) %>%
+  mutate(
+    Categoría = ifelse(inseguridad_alimentaria == 1, "Tiene inseguridad alimentaria", "No tiene inseguridad alimentaria"),
+    Porcentaje = paste0(round(100 * n / sum(n), 1), "%")
+  ) %>%
+  select(Categoría, Frecuencia = n, Porcentaje) %>%
+  kable(format = "html", caption = "Distribución de hogares según inseguridad alimentaria") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = F, position = "center", font_size = 14)
+
+```
+
+```{r}
+# Tabla de datos con porcentaje ESTRATO
+tabla_i <- bdt %>%
+  count(inseguridad_alimentaria) %>%
+  mutate(
+    Categoria = factor(inseguridad_alimentaria, labels = c("Sí", "No")),
+    Porcentaje = round(100 * n / sum(n), 1),
+    Etiqueta = paste0(n, " (", Porcentaje, "%)")
+  )
+
+# Gráfico final
+ggplot(tabla_i, aes(x = Categoria, y = n)) +
+  geom_bar(stat = "identity", fill = "#A2DBB5", width = 0.6) +
+  geom_text(aes(label = Etiqueta), vjust = -0.5, size = 4.2) +
+  theme_minimal() +
+  labs(
+    title = "Distribución de hogares según inseguridad alimentaria",
+    x = "Inseguridad Alimentaria",
+    y = "Frecuencia",
+    caption = "Encuesta Nacional de Hogares (ENAHO) - 2024, INEI Perú.\nElaboración propia."
+  ) +
+  ylim(0, max(tabla_pe$n) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.caption = element_text(hjust = 0, size = 9, margin = margin(t = 10))
+  )
+```
+##ANÁLISIS BIVARIADO
+
+#VARIABLES NUMÉRICAS CON POBREZA ENERGÉTICA
+```{r}
+str(bdt)
+```
+
+```{r}
+library(lsr)
+```
+
+
+```{r}
+ic_grupo = bdt %>% 
+  dplyr::group_by(Pobre_energético) %>% 
+  dplyr::summarise(Media = mean(P1172.02, na.rm=T),
+            min = ciMean(P1172.02, na.rm=T)[1],
+            max = ciMean(P1172.02, na.rm=T)[2])
+ic_grupo
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(ic_grupo, aes(x = Pobre_energético, y = Media)) +
+  geom_bar(stat = "identity", fill = "#00688B", color = "black") +
+  geom_errorbar(aes(ymin = min, ymax = max), width = 0.2) +
+  
+  # Etiquetas de la media
+  geom_text(aes(label = paste(round(Media, 2))), vjust = -1, size = 4) +
+  
+  # Etiquetas de los valores mínimos
+  geom_text(aes(y = min, label = paste("min:", round(min, 2))), 
+            vjust = 1.5, hjust = -0.2, size = 3, color = "white") +
+  
+  # Etiquetas de los valores máximos
+  geom_text(aes(y = max, label = paste("max:", round(max, 2))), 
+            vjust = -0.5, hjust = -0.2, size = 3, color = "#00688B") +
+  
+  xlab("Zona de Lima") + 
+  ylab("Promedio del gasto en transporte") +
+  ylim(0, 140) +
+  theme_minimal()
+```
+```{r}
+t.test(P1172.02 ~ Pobre_energético, data = bdt)
+```
+```{r}
+
+
+# Diccionario de nombres claros
+nombres_amigables <- c(
+  "P1172.02" = "Gasto mensual en electricidad (S/.)",
+  "ingreso_pc_mensual" = "Ingreso per cápita mensual (S/.)",
+  "P208A" = "Edad del jefe/a de hogar",
+  "MIEPERHO" = "Miembros del hogar"
+)
+
+# Variables numéricas
+vars_numericas <- names(nombres_amigables)
+
+# Función corregida
+resultados_ttest <- lapply(vars_numericas, function(var) {
+  t <- t.test(bdt[[var]] ~ bdt$Pobre_energético)
+  media_no_pobre <- as.numeric(t$estimate[1])  # grupo 0
+  media_pobre <- as.numeric(t$estimate[2])     # grupo 1
+
+  data.frame(
+    Variable = nombres_amigables[[var]],
+    `Media No Pobre` = round(media_no_pobre, 2),
+    `Media Pobre` = round(media_pobre, 2),
+    `IC 95% Inferior` = round(t$conf.int[1], 2),
+    `IC 95% Superior` = round(t$conf.int[2], 2),
+    `Valor p` = round(t$p.value, 4)
+  )
+})
+
+# Unir resultados
+tabla_bivariado <- bind_rows(resultados_ttest)
+
+# Mostrar tabla
+tabla_bivariado %>%
+  kable(format = "html", caption = "Comparación de medias según pobreza energética (t-test)") %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = F,
+    position = "center",
+    font_size = 14
+  )
+
+```
+
+Nota: Los intervalos de confianza están calculados como la diferencia entre “No pobre energético – Pobre energético”. Un valor negativo indica que el grupo pobre energético tiene una media mayor en esa variable.
+
+```{r}
+#GASTO MENSUAL EN ELECTRICIDAD
+g_ic <- bdt %>%
+  group_by(Pobre_energético) %>%
+  summarise(
+    Media = mean(P1172.02, na.rm = TRUE),
+    SD = sd(P1172.02, na.rm = TRUE),
+    N = n(),
+    SE = SD / sqrt(N),
+    IC_Inf = Media - 1.96 * SE,
+    IC_Sup = Media + 1.96 * SE
+  ) %>%
+  mutate(
+    Grupo = factor(Pobre_energético, labels = c("No pobre energético", "Pobre energético"))
+  )
+
+# Gráfico con etiquetas de los intervalos
+ggplot(g_ic, aes(x = Grupo, y = Media)) +
+  geom_bar(stat = "identity", fill = "#2E7D32", color = "black", width = 0.6) +
+  geom_errorbar(aes(ymin = IC_Inf, ymax = IC_Sup), width = 0.2) +
+
+  # Etiqueta de la media
+  geom_text(aes(label = paste("Media:", round(Media, 2)), x = as.numeric(Grupo) + 0.15), 
+            vjust = 0.5, hjust = 0, size = 4, fontface = "bold") +
+
+  # Etiquetas del IC inferior y superior
+  geom_text(aes(y = IC_Inf, label = paste("IC↓", round(IC_Inf, 2))), 
+            vjust = 1.5, size = 3, color = "white") +
+  geom_text(aes(y = IC_Sup, label = paste("IC↑", round(IC_Sup, 2))), 
+            vjust = -0.5, size = 3, color = "#1B5E20") +
+
+  labs(
+    title = "Gasto mensual en electricidad según Pobreza Energética",
+    x = "Condición de pobreza energética",
+    y = "Promedio del gasto (S/.)",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  ylim(0, max(g_ic$IC_Sup) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.caption = element_text(hjust = 0, size = 9)
+  )
+```
+
+```{r}
+# INGRESO PER CÁPITA
+i_ic <- bdt %>%
+  group_by(Pobre_energético) %>%
+  summarise(
+    Media = mean(ingreso_pc_mensual, na.rm = TRUE),
+    SD = sd(ingreso_pc_mensual, na.rm = TRUE),
+    N = n(),
+    SE = SD / sqrt(N),
+    IC_Inf = Media - 1.96 * SE,
+    IC_Sup = Media + 1.96 * SE
+  ) %>%
+  mutate(
+    Grupo = factor(Pobre_energético, labels = c("No pobre energético", "Pobre energético"))
+  )
+
+# Gráfico con etiquetas de los intervalos
+ggplot(i_ic, aes(x = Grupo, y = Media)) +
+  geom_bar(stat = "identity", fill = "#2E7D32", color = "black", width = 0.6) +
+  geom_errorbar(aes(ymin = IC_Inf, ymax = IC_Sup), width = 0.2) +
+
+  # Etiqueta de la media
+  geom_text(aes(label = paste("Media:", round(Media, 2)), x = as.numeric(Grupo) + 0.15), 
+            vjust = 0.5, hjust = 0, size = 4, fontface = "bold") +
+
+  # Etiquetas del IC inferior y superior
+  geom_text(aes(y = IC_Inf, label = paste("IC↓", round(IC_Inf, 2))), 
+            vjust = 1.5, size = 3, color = "white") +
+  geom_text(aes(y = IC_Sup, label = paste("IC↑", round(IC_Sup, 2))), 
+            vjust = -0.5, size = 3, color = "#1B5E20") +
+
+  labs(
+    title = "Ingreso per cápita mensual según Pobreza Energética",
+    x = "Condición de pobreza energética",
+    y = "Promedio del ingreso (S/.)",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  ylim(0, max(i_ic$IC_Sup) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.caption = element_text(hjust = 0, size = 9)
+  )
+
+```
+
+```{r}
+# EDAD
+e_ic <- bdt %>%
+  group_by(Pobre_energético) %>%
+  summarise(
+    Media = mean(P208A, na.rm = TRUE),
+    SD = sd(P208A, na.rm = TRUE),
+    N = n(),
+    SE = SD / sqrt(N),
+    IC_Inf = Media - 1.96 * SE,
+    IC_Sup = Media + 1.96 * SE
+  ) %>%
+  mutate(
+    Grupo = factor(Pobre_energético, labels = c("No pobre energético", "Pobre energético"))
+  )
+
+# Gráfico con etiquetas de los intervalos
+ggplot(e_ic, aes(x = Grupo, y = Media)) +
+  geom_bar(stat = "identity", fill = "#2E7D32", color = "black", width = 0.6) +
+  geom_errorbar(aes(ymin = IC_Inf, ymax = IC_Sup), width = 0.2) +
+
+  # Etiqueta de la media
+  geom_text(aes(label = paste("Media:", round(Media, 2)), x = as.numeric(Grupo) + 0.15), 
+            vjust = 0.5, hjust = 0, size = 4, fontface = "bold") +
+
+  # Etiquetas del IC inferior y superior
+  geom_text(aes(y = IC_Inf, label = paste("IC↓", round(IC_Inf, 2))), 
+            vjust = 1.5, size = 3, color = "white") +
+  geom_text(aes(y = IC_Sup, label = paste("IC↑", round(IC_Sup, 2))), 
+            vjust = -0.5, size = 3, color = "#1B5E20") +
+
+  labs(
+    title = "Edad del jefe/a de hogar según Pobreza Energética",
+    x = "Condición de pobreza energética",
+    y = "Promedio de la edad (años)",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  ylim(0, max(e_ic$IC_Sup) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.caption = element_text(hjust = 0, size = 9)
+  )
+
+```
+
+```{r}
+# MIEMBROS DEL HOGAR
+e_ic <- bdt %>%
+  group_by(Pobre_energético) %>%
+  summarise(
+    Media = mean(MIEPERHO, na.rm = TRUE),
+    SD = sd(MIEPERHO, na.rm = TRUE),
+    N = n(),
+    SE = SD / sqrt(N),
+    IC_Inf = Media - 1.96 * SE,
+    IC_Sup = Media + 1.96 * SE
+  ) %>%
+  mutate(
+    Grupo = factor(Pobre_energético, labels = c("No pobre energético", "Pobre energético"))
+  )
+
+# Gráfico con etiquetas de los intervalos
+ggplot(e_ic, aes(x = Grupo, y = Media)) +
+  geom_bar(stat = "identity", fill = "#2E7D32", color = "black", width = 0.6) +
+  geom_errorbar(aes(ymin = IC_Inf, ymax = IC_Sup), width = 0.2) +
+
+  # Etiqueta de la media
+  geom_text(aes(label = paste("Media:", round(Media, 2)), x = as.numeric(Grupo) + 0.15), 
+            vjust = 0.5, hjust = 0, size = 4, fontface = "bold") +
+
+  # Etiquetas del IC inferior y superior
+  geom_text(aes(y = IC_Inf, label = paste("IC↓", round(IC_Inf, 2))), 
+            vjust = 1.5, size = 3, color = "white") +
+  geom_text(aes(y = IC_Sup, label = paste("IC↑", round(IC_Sup, 2))), 
+            vjust = -0.5, size = 3, color = "#1B5E20") +
+
+  labs(
+    title = "Miembros del hogar según Pobreza Energética",
+    x = "Condición de pobreza energética",
+    y = "Promedio de la cantidad de miembros del hogar",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  ylim(0, max(e_ic$IC_Sup) * 1.15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.caption = element_text(hjust = 0, size = 9)
+  )
+
+```
+
+#VARIABLES CATEGÓRICAS CON POBREZA ENERGÉTICA
+```{r}
+library(gtsummary)
+```
+
+
+```{r}
+# Crear un nuevo data frame solo con variables categóricas relevantes
+bdt_cat <- bdt %>%
+  select(
+    Pobre_energético,
+    material_pared,
+    estrato_bin,
+    educacion_basica_completa,
+    inseguridad_alimentaria,
+    sexo_mujer
+  ) %>%
+  mutate(
+    # Recodificar pobreza energética
+    Pobre_energético = factor(Pobre_energético,
+                               levels = c(0, 1),
+                               labels = c("No pobre energético", "Pobre energético")),
+    
+    # Material de pared (ya está en texto, pero lo forzamos a factor para consistencia)
+    material_pared = factor(material_pared,
+                            levels = c("Precario", "Duradero")), 
+    
+    # Estrato binario
+    estrato_bin = factor(estrato_bin,
+                         levels = c("Rural", "Urbano")), 
+    
+    # Educación básica completa
+    educacion_basica_completa = factor(educacion_basica_completa,
+                                       levels = c(0, 1),
+                                       labels = c("No completó", "Sí completó")),
+    
+    # Inseguridad alimentaria
+    inseguridad_alimentaria = factor(inseguridad_alimentaria,
+                                     levels = c(0, 1),
+                                     labels = c("No inseguro", "Inseguro")),
+    
+    # Sexo mujer
+    sexo_mujer = factor(sexo_mujer,
+                        levels = c(0, 1),
+                        labels = c("Hombre", "Mujer"))
+  )
+```
+
+
+```{r}
+str(bdt_cat)
+```
+##MATERIAL PARED
+
+```{r}
+bdt_cat %>%
+  select(Pobre_energético, material_pared) %>%
+  tbl_summary(
+    by = material_pared,
+    label = list(Pobre_energético ~ "Condición"),
+    statistic = list(all_categorical() ~ "{n} ({p}%)"),
+    missing = "no"
+  ) %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_caption("**Distribución de la pobreza energética según material de la pared**")
+```
+
+```{r}
+# Agrupar por pobreza energética (VD)
+df_plot <- bdt_cat %>%
+  count(Pobre_energético, material_pared) %>%
+  group_by(material_pared) %>%
+  mutate(
+    prop = n / sum(n),
+    label = paste0(round(prop * 100, 1), "%")
+  )
+
+# Gráfico de barras apiladas por condición de pobreza energética
+ggplot(df_plot, aes(x = material_pared, y = prop, fill = Pobre_energético)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +
+  geom_text(aes(label = label),
+            position = position_fill(vjust = 0.5), color = "white", size = 4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("#8BC34A", "#33691E")) +
+  labs(
+    title = "Distribución de la pobreza energética según material de la pared",
+    x = "Material de la pared",
+    y = "Porcentaje",
+    fill = "Condición",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.caption = element_text(hjust = 0, size = 9),
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+
+```
+#Se observa que la mayoría de hogares con pared precaria se encuentran en situación de pobreza energética, lo que sugiere una fuerte asociación entre condiciones materiales de la vivienda y esta forma de pobreza.
+
+#PRUEBA CHI CUADRADO: 
+```{r}
+# Tabla de contingencia
+tabla_chi <- table(bdt_cat$Pobre_energético, bdt_cat$material_pared)
+tabla_chi
+
+```
+```{r}
+# Aplicar prueba de Chi-cuadrado
+chisq.test(tabla_chi)
+```
+Los hogares construidos con materiales precarios tienen una mayor prevalencia de pobreza energética, lo cual refleja una relación estructural entre condiciones habitacionales deficientes y restricciones en el acceso y uso de la energía.
+
+#ESTRATO
+```{r}
+bdt_cat %>%
+  select(Pobre_energético, estrato_bin) %>%
+  tbl_summary(
+    by = estrato_bin,
+    label = list(Pobre_energético ~ "Condición"),
+    statistic = list(all_categorical() ~ "{n} ({p}%)"),
+    missing = "no"
+  ) %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_caption("**Distribución de la pobreza energética según estrato geográfico**")
+```
+
+```{r}
+# Agrupar por pobreza energética (VD)
+df_plot <- bdt_cat %>%
+  count(Pobre_energético, estrato_bin) %>%
+  group_by(estrato_bin) %>%
+  mutate(
+    prop = n / sum(n),
+    label = paste0(round(prop * 100, 1), "%")
+  )
+
+# Gráfico de barras apiladas por condición de pobreza energética
+ggplot(df_plot, aes(x = estrato_bin, y = prop, fill = Pobre_energético)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +
+  geom_text(aes(label = label),
+            position = position_fill(vjust = 0.5), color = "white", size = 4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("#8BC34A", "#33691E")) +
+  labs(
+    title = "Distribución de la pobreza energética según estrato geográfico",
+    x = "Estrato Geográfico",
+    y = "Porcentaje",
+    fill = "Condición",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.caption = element_text(hjust = 0, size = 9),
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+```
+```{r}
+# Tabla de contingencia
+tabla_chi2 <- table(bdt_cat$Pobre_energético, bdt_cat$estrato_bin)
+tabla_chi2
+```
+
+```{r}
+# Aplicar prueba de Chi-cuadrado
+chisq.test(tabla_chi2)
+```
+##INSEGURIDAD ALIMENTARIA
+```{r}
+bdt_cat %>%
+  select(Pobre_energético, inseguridad_alimentaria) %>%
+  tbl_summary(
+    by = inseguridad_alimentaria,
+    label = list(Pobre_energético ~ "Condición"),
+    statistic = list(all_categorical() ~ "{n} ({p}%)"),
+    missing = "no"
+  ) %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_caption("**Distribución de la pobreza energética según inseguridad alimentaria**")
+```
+
+```{r}
+# Agrupar por pobreza energética (VD)
+df_plot <- bdt_cat %>%
+  count(Pobre_energético, inseguridad_alimentaria) %>%
+  group_by(inseguridad_alimentaria) %>%
+  mutate(
+    prop = n / sum(n),
+    label = paste0(round(prop * 100, 1), "%")
+  )
+
+# Gráfico de barras apiladas por condición de pobreza energética
+ggplot(df_plot, aes(x = inseguridad_alimentaria, y = prop, fill = Pobre_energético)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +
+  geom_text(aes(label = label),
+            position = position_fill(vjust = 0.5), color = "white", size = 4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("#8BC34A", "#33691E")) +
+  labs(
+    title = "Distribución de la pobreza energética según inseguridad alimentaria",
+    x = "Inseguridad Alimentaria",
+    y = "Porcentaje",
+    fill = "Condición",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.caption = element_text(hjust = 0, size = 9),
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+```
+
+```{r}
+# Tabla de contingencia
+tabla_chi3 <- table(bdt_cat$Pobre_energético, bdt_cat$inseguridad_alimentaria)
+tabla_chi3
+```
+
+```{r}
+# Aplicar prueba de Chi-cuadrado
+chisq.test(tabla_chi3)
+```
+##EDUCACIÓN BÁSICA COMPLETA
+```{r}
+bdt_cat %>%
+  select(Pobre_energético, educacion_basica_completa) %>%
+  tbl_summary(
+    by = educacion_basica_completa,
+    label = list(Pobre_energético ~ "Condición"),
+    statistic = list(all_categorical() ~ "{n} ({p}%)"),
+    missing = "no"
+  ) %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_caption("**Distribución de la pobreza energética según educación básica completa**")
+```
+
+```{r}
+# Agrupar por pobreza energética (VD)
+df_plot <- bdt_cat %>%
+  count(Pobre_energético, educacion_basica_completa) %>%
+  group_by(educacion_basica_completa) %>%
+  mutate(
+    prop = n / sum(n),
+    label = paste0(round(prop * 100, 1), "%")
+  )
+
+# Gráfico de barras apiladas por condición de pobreza energética
+ggplot(df_plot, aes(x = educacion_basica_completa, y = prop, fill = Pobre_energético)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +
+  geom_text(aes(label = label),
+            position = position_fill(vjust = 0.5), color = "white", size = 4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("#8BC34A", "#33691E")) +
+  labs(
+    title = "Distribución de la pobreza energética según educación básica completa",
+    x = "Educación Básica Completa",
+    y = "Porcentaje",
+    fill = "Condición",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.caption = element_text(hjust = 0, size = 9),
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+```
+```{r}
+# Tabla de contingencia
+tabla_chi4 <- table(bdt_cat$Pobre_energético, bdt_cat$educacion_basica_completa)
+tabla_chi4
+```
+
+```{r}
+# Aplicar prueba de Chi-cuadrado
+chisq.test(tabla_chi4)
+```
+##SEXO
+```{r}
+bdt_cat %>%
+  select(Pobre_energético, sexo_mujer) %>%
+  tbl_summary(
+    by = sexo_mujer,
+    label = list(Pobre_energético ~ "Condición"),
+    statistic = list(all_categorical() ~ "{n} ({p}%)"),
+    missing = "no"
+  ) %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_caption("**Distribución de la pobreza energética según sexo**")
+```
+
+```{r}
+# Agrupar por pobreza energética (VD)
+df_plot <- bdt_cat %>%
+  count(Pobre_energético, sexo_mujer) %>%
+  group_by(sexo_mujer) %>%
+  mutate(
+    prop = n / sum(n),
+    label = paste0(round(prop * 100, 1), "%")
+  )
+
+# Gráfico de barras apiladas por condición de pobreza energética
+ggplot(df_plot, aes(x = sexo_mujer, y = prop, fill = Pobre_energético)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +
+  geom_text(aes(label = label),
+            position = position_fill(vjust = 0.5), color = "white", size = 4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("#8BC34A", "#33691E")) +
+  labs(
+    title = "Distribución de la pobreza energética según sexo",
+    x = "Sexo",
+    y = "Porcentaje",
+    fill = "Condición",
+    caption = "Fuente: ENAHO 2024, INEI Perú. Elaboración propia."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.caption = element_text(hjust = 0, size = 9),
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+```
+#CHI CUADRADO DE PRUEBA: 
+
+```{r}
+tabla_chi5 <- table(bdt_cat$Pobre_energético, bdt_cat$sexo_mujer)
+tabla_chi5
+```
+
+```{r}
+# Aplicar prueba de Chi-cuadrado
+chisq.test(tabla_chi5)
+```
+
+############################ REGRESIÓN LOGÍSTICA ################################33
+
+```{r}
+dtr2= read.csv("https://raw.githubusercontent.com/GeraldyAle16/PROYECT_EnergyPoverty/refs/heads/main/ConsolidadoTF2.csv")
+```
+
+```{r}
+str(dtr2)
+```
+```{r}
+dtr2$pared_precaria <- ifelse(dtr2$material_pared == "Precario", 1, 0)
+dtr2$estrato_rural <- ifelse(dtr2$estrato_bin == "Rural", 1, 0)
+names(dtr2)[names(dtr2) == "P208A"] <- "edad_jefe"
+names(dtr2)[names(dtr2) == "MIEPERHO"] <- "miembros_hogar"
+
+
+```
+
+```{r}
+rlog1 <- glm(Pobre_energético ~ ingreso_pc_z + pared_precaria +
+               miembros_hogar + educacion_basica_completa,
+             family = binomial, data = dtr2)
+```
+
+
+```{r}
+rlog2 <- glm(Pobre_energético ~ ingreso_pc_z + pared_precaria +
+               miembros_hogar + educacion_basica_completa + estrato_rural,
+             family = binomial, data = dtr2)
+
+```
+
+
+```{r}
+rlog3 <- glm(Pobre_energético ~ ingreso_pc_z + pared_precaria +
+               miembros_hogar + educacion_basica_completa + estrato_rural+inseguridad_alimentaria,
+             family = binomial, data = dtr2)
+
+```
+
+```{r results='asis'}
+library(modelsummary)
+library(kableExtra)
+
+modelsrl <- list(
+  "Modelo I" = rlog1,
+  "Modelo II" = rlog2,
+  "Modelo III" = rlog3
+)
+
+f <- function(x) format(x, digits = 4, scientific = FALSE)
+
+modelsummary(modelsrl,
+             fmt = f,
+             exponentiate = TRUE,
+             statistic = "conf.int",
+             stars = TRUE,
+             output = "kableExtra",
+             title = "Regresión Logística: Determinantes de la pobreza energética") %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  ) 
+```
+
+```{r}
+#install.packages("webshot2")
+
+```
+
+
+```{r}
+library(modelsummary)
+library(flextable)
+
+modelsummary(modelsrl,
+             fmt = f,
+             exponentiate = TRUE,
+             statistic = "conf.int",
+             stars = TRUE,
+             output = "flextable",
+             title = "Regresión Logística: Determinantes de la pobreza energética") %>%
+  save_as_docx(path = "regresiones_logisticas.docx")
+
+
+```
+
+
+
+
+```{r}
+str(dtr2)
+```
+
+#COEFICIENTES ESTANDARIZADOS: 
+
+```{r}
+# 1. Variables del modelo
+vars_modelo <- c("pared_precaria", "miembros_hogar",
+                 "educacion_basica_completa", 
+                 "estrato_rural", "inseguridad_alimentaria")
+
+# 2. Calcular desviación estándar (excepto ingreso_pc_z)
+sd_vars <- apply(dtr2[, vars_modelo], 2, sd)
+
+# 3. Extraer coeficientes del modelo
+coef_modelo <- coef(rlog3)[c("ingreso_pc_z", vars_modelo)]
+
+# 4. Calcular coeficiente estandarizado:
+# ingreso_pc_z se queda igual porque ya está estandarizado
+coef_estandarizados <- c(
+  ingreso_pc_z = coef_modelo["ingreso_pc_z"],  # ya estandarizado
+  sd_vars * coef_modelo[vars_modelo]
+)
+
+# 5. Crear tabla ordenada
+tabla_coef <- data.frame(
+  Variable = names(coef_estandarizados),
+  Coef_Estandarizado = coef_estandarizados
+)
+
+# 6. Mostrar tabla ordenada por magnitud
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+tabla_coef %>%
+  arrange(desc(abs(Coef_Estandarizado))) %>%
+  kable(caption = "Coeficientes estandarizados del modelo logit final") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+
+
+
+
+
+```
+#COMPARACIÓN DE MODELOS
+```{r}
+library(lmtest)
+library(knitr)
+library(kableExtra)
+
+# Comparación formal de modelos anidados con LRT
+lrtest(rlog1, rlog2, rlog3) %>%
+  kable(
+    caption = "Tabla 1. Comparación de modelos mediante el test de razón de verosimilitud (LRT)",
+    digits = 4,
+    align = "c"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  ) %>%
+  add_header_above(c(" " = 1, "Resultados del test LRT" = 4)) 
+
+
+```
+
+```{r}
+library(dotwhisker)
+library(broom)
+library(dplyr)
+library(ggplot2)
+
+# Nombres amigables para las variables
+pretty_names <- c(
+  "pared_precaria" = "Pared precaria",
+    "educacion_basica_completa" = "Educación básica completa",
+  "miembros_hogar" = "Miembros del hogar",
+  "ingreso_pc_z" = "Ingreso per cápita (z)",
+  "estrato_rural" = "Zona rural",
+  "inseguridad_alimentaria" = "Inseguridad alimentaria"
+)
+
+# Gráfico ajustado
+dwplot(list(
+  `Modelo I` = rlog1,
+  `Modelo II` = rlog2,
+  `Modelo III` = rlog3
+), exp = TRUE) %>%
+  relabel_predictors(pretty_names) +
+  geom_vline(xintercept = 1, linetype = 2, color = "grey50") +
+  labs(
+    title = "Comparación de Odds Ratios en Modelos Logit",
+    subtitle = "Coeficientes exponenciados con IC del 95%",
+    x = "Odds Ratio (IC 95%)",
+    y = NULL,
+    color = "Modelo"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold", size = 13, hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.text.y = element_text(size = 11)
+  )
+
+```
+#EVALUANDO MODELO SELECCIONADO
+```{r}
+library(pROC)
+library(caret)
+library(kableExtra)
+library(tidyr)
+```
+
+```{r}
+predicted <- predict(rlog3, newdata = dtr2, type = "response")
+```
+
+
+```{r}
+# 2. Convertir las probabilidades a clases (umbral 0.5)
+predicted_class <- ifelse(predicted > 0.5, 1, 0)
+```
+
+```{r}
+# 3. Convertir a factores para la matriz de confusión
+actuals_factor <- factor(dtr2$Pobre_energético, levels = c(0, 1))
+predicted_factor <- factor(predicted_class, levels = c(0, 1))
+```
+
+```{r}
+# 4. Matriz de confusión
+cm <- confusionMatrix(predicted_factor, actuals_factor, positive = "1")
+```
+
+```{r}
+# 5. Mostrar matriz formateada con kable
+as.data.frame(cm$table) %>%
+  pivot_wider(names_from = Prediction, values_from = Freq) %>%
+  kable(caption = "Matriz de Confusión") %>%
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+# 6. Calcular y graficar curva ROC
+roc_obj <- roc(dtr2$Pobre_energético, predicted)
+plot(roc_obj, main = "Curva ROC", col = "blue", lwd = 2)
+```
+
+```{r}
+auc(roc_obj)
+```
+
+```{r}
+# Sensibilidad (también llamada Recall o Tasa de verdaderos positivos)
+cm$byClass["Sensitivity"]
+
+# Especificidad (Tasa de verdaderos negativos)
+cm$byClass["Specificity"]
+```
+
+```{r}
+cm$byClass
+```
+##AHORA: EFECTOS MARGINALES
+```{r}
+# interpracion usando marginal effects:
+library(margins)
+```
+
+```{r}
+head(predicted)
+```
+```{r}
+marginalsData=summary(margins(rlog3)) 
+marginalsData%>% kable(caption = "Efectos Marginales Promedio (AME)- Modelo III") %>%kableExtra::kable_styling(full_width = T)
+```
+
+```{r}
+ggplot(marginalsData, aes(x = reorder(factor, AME), y = AME)) +
+  geom_point(size = 3, color = "#0072B2") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, color = "#0072B2") +
+  geom_text(aes(label = round(AME, 3)), hjust = -0.2, size = 3.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  coord_flip() +
+  labs(
+    title = "Efectos Marginales Promedio (AME) - Modelo III",
+    x = "Variables del modelo",
+    y = "AME"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+
+############################## ANÁLSIS FACTORIAL EXPLORATORIO ##########################
+
+
+```{r}
+fac= read.csv("https://raw.githubusercontent.com/GeraldyAle16/PROYECT_EnergyPoverty/refs/heads/main/ConsolidadoTF2.csv")
+```
+
+
+```{r}
+str(fac)
+```
+
+```{r}
+names(fac)
+```
+```{r}
+dontselect=c("CONGLOME","VIVIENDA","HOGAR",
+             "UBIGEO", "puntaje", "P101", "P102","P1172.02","P207",  "P208A","P301A", "MIEPERHO", "Pobre_energético", "ESTRATO", "ingreso_pc_mensual", "inseguridad_alimentaria" , "sexo_mujer", "educacion_basica_completa", "material_pared", "ingreso_pc_z", "gasto_elec_z", "distrito", "provincia", "provincia_ubigeo", "estrato_bin" )
+select=setdiff(names(fac),dontselect) 
+theData=fac[,select]
+
+# usaremos:
+library(magrittr)
+head(theData,10)%>%
+    rmarkdown::paged_table()
+```
+```{r}
+library(polycor)
+corMatrix=polycor::hetcor(theData)$correlations
+```
+
+```{r}
+round(corMatrix,2)
+```
+
+```{r}
+library(ggcorrplot)
+
+ggcorrplot(corMatrix)
+```
+
+#PASOS QUE EL EFA (ANÁLISIS FACTORIAL EXPLORATORIO) REQUIERE: 
+#1. VERIFICAR SI LOS DATOS PERMITEN FACTORIZAR
+
+```{r}
+library(psych)
+psych::KMO(corMatrix) 
+```
+#2. VERIFICAMOS SI LA MATRIZ DE CORRELACIONES ES ADECUADA: 
+MATRIZ IDENTIDAD BARTLETT
+```{r}
+cortest.bartlett(corMatrix,n=nrow(theData))$p.value>0.05
+```
+
+SINGULARIDAD DE MATRIZ
+```{r}
+library(matrixcalc)
+
+is.singular.matrix(corMatrix)
+```
+
+#PARA DETERMINAR CUANTOS FACTORES O VARIABLES LATENTES PODRÍAMOS REDIMENSIONAR LA DATA: 
+```{r}
+set.seed(2024)
+fa.parallel(theData, fa = 'fa',correct = T,plot = F)
+```
+#REDIMENSIONAMOS A NÚMERO DE FACTORES: 
+RESULTADO INICIAL:
+```{r}
+library(GPArotation)
+resfa <- fa(theData,
+            nfactors = 3,
+            cor = 'mixed',
+            rotate = "varimax", #oblimin?
+            fm="minres")
+print(resfa$loadings)
+```
+RESULTADO MEJORADO (SOLO SI ES MÁS DE UN FACTOR)
+```{r}
+print(resfa$loadings,cutoff = 0.5)
+```
+#RESULTADO VISUAL:
+```{r}
+fa.diagram(resfa,main = "Resultados del EFA")
+```
+#EVALUANDO RESULTADO OBTENIDO
+¿Qué variables aportaron más a los factores?
+```{r}
+sort(resfa$communality)
+```
+¿Qué variables contribuyen a la construcción de más de un factor?
+```{r}
+sort(resfa$complexity)
+```
+¿Tucker Lewis > 0.9?
+```{r}
+resfa$TLI
+```
+¿RMS cerca a cero?
+```{r}
+resfa$rms
+```
+¿RMSEA cerca a cero?
+```{r}
+resfa$RMSEA
+```
+```{r}
+resfa$BIC
+```
+##OBTENCIÓN DE ÍNDICES
+```{r}
+as.data.frame(resfa$scores)%>%head()
+```
+
+#AGRUPAMOS POR INDICE:
+```{r}
+fac$Privación_selectr=resfa$scores[,1]
+fac$Privación_combus=resfa$scores[,2]
+fac$Privación_conect=resfa$scores[,3]
+```
+
+```{r}
+str(fac)
+```
+
+```{r}
+head(fac)
+```
+
+
+```{r}
+cor(fac$Privación_selectr,fac$Privación_combus)
+```
+
+```{r}
+ggplot(data=fac,aes(x=puntaje,y=Privación_combus)) + geom_point() + theme_minimal() + labs(x="Puntaje de poobreza energética (original)", y="Indice de privaciónn en combustibles domésticos"
+                                                                                           )
+```
+
+
+###AHORA HACEMOS ANÁLISIS DE CLÚSTERS
+
+```{r}
+str(fac)
+```
+
+```{r}
+library(dplyr)
+```
+
+
+```{r}
+datse <- fac %>%
+  select(UBIGEO,CONGLOME, VIVIENDA,HOGAR, provincia,distrito,privacion_cocina, privacion_ilumina, privacion_comuni, privacion_electro, privacion_entreteni)
+```
+
+```{r}
+str(datse)
+```
+
+
+```{r}
+# Agrupar por distrito y calcular promedios
+
+datse_distrito <- datse %>%
+  group_by(distrito) %>%
+  summarise(
+    prop_cocina     = mean(privacion_cocina, na.rm = TRUE),
+    prop_ilumina    = mean(privacion_ilumina, na.rm = TRUE),
+    prop_comuni     = mean(privacion_comuni, na.rm = TRUE),
+    prop_electro    = mean(privacion_electro, na.rm = TRUE),
+    prop_entreteni  = mean(privacion_entreteni, na.rm = TRUE)
+  )
+```
+
+```{r}
+str(datse_distrito)
+```
+
+
+```{r}
+boxplot(datse_distrito[,c(2:6)],horizontal = F,las=2,cex.axis = 0.5)
+```
+```{r}
+cor(datse_distrito[,c(2:6)])
+```
+
+```{r}
+dataClus <- as.data.frame(datse_distrito[, 2:6])
+row.names(dataClus) <- datse_distrito$distrito
+```
+
+```{r}
+library(cluster)
+g.dist = daisy(dataClus, metric="gower")
+```
+
+```{r}
+library(factoextra)
+fviz_nbclust(dataClus, pam,diss=g.dist,method = "gap_stat",k.max = 10,verbose = F)
+```
+
+```{r}
+library(kableExtra)
+set.seed(123)
+res.pam=pam(g.dist,5,cluster.only = F)
+
+#nueva columna
+dataClus$pam=res.pam$cluster
+
+# ver
+
+head(dataClus,15)%>%kbl()%>%kable_styling()
+```
+
+```{r}
+fviz_silhouette(res.pam,print.summary = F)
+```
+
+```{r}
+#install.packages("magritrr")
+```
+
+```{r}
+library(magrittr)
+```
+
+```{r}
+silPAM=data.frame(res.pam$silinfo$widths)
+silPAM$distrito=row.names(silPAM)
+poorPAM=silPAM[silPAM$sil_width<0,'distrito']%>%sort()
+poorPAM
+```
+```{r}
+aggregate(.~ pam, data=dataClus,mean)
+```
+
+```{r}
+original=aggregate(.~ pam, data=dataClus,mean)
+original[order(original$prop_cocina),]
+```
+
+```{r}
+dataClus$pam=dplyr::recode(dataClus$pam, `4` = 1, `3`=2,`2`=3,`1`=4, `5`=5)
+```
+
+```{r}
+aggregate(.~ pam, data=dataClus,mean)
+```
+```{r}
+dataClus
+```
+
+
+```{r}
+datse_distrito$pamIPEpoor=datse_distrito$distrito%in%poorPAM
+datse_distrito$pamIPE=as.ordered(dataClus$pam)
+dataClus$pam=NULL
+```
+
+AGNES: 
+```{r}
+## PARA JERARQUICO
+
+fviz_nbclust(dataClus, hcut,diss=g.dist,method = "gap_stat",k.max = 10,verbose = F,hc_func = "agnes")
+```
+
+DIANA: 
+```{r}
+
+fviz_nbclust(dataClus, hcut,diss=g.dist,method = "gap_stat",k.max = 10,verbose = F,hc_func = "diana")
+```
+
+
+#EMPEZAMOS A GRAFICAR:
+```{r}
+# k es la cantidad de dimensiones
+proyeccion = cmdscale(g.dist, k=2,add = T) 
+head(proyeccion$points,20)
+```
+```{r}
+####GRAFICAMOS
+
+datse_distrito$dim1 <- proyeccion$points[,1]
+datse_distrito$dim2 <- proyeccion$points[,2]
+```
+
+```{r}
+library(ggrepel)
+```
+
+```{r}
+base= ggplot(datse_distrito,aes(x=dim1, y=dim2,label=row.names(dataClus))) 
+base + geom_text_repel(size=3, max.overlaps = 50,min.segment.length = unit(0, 'lines'))
+```
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+
+ggplot(datse_distrito, aes(x = dim1, y = dim2, label = row.names(dataClus))) +
+  geom_text_repel(size = 3, max.overlaps = 100, min.segment.length = unit(0, 'lines')) +
+  theme_minimal() +
+  labs(
+    x = "Dimensión 1 (45% varianza explicada)",
+    y = "Dimensión 2 (25% varianza explicada)",
+    title = "Distribución de distritos según dimensiones latentes"
+  )
+```
+
+```{r}
+# solo distritos mal clusterizados
+PAMlabels=ifelse(datse_distrito$pamIPEpoor,datse_distrito$distrito,'')
+
+#base
+base= ggplot(datse_distrito,aes(x=dim1, y=dim2))  +
+    scale_color_brewer(type = 'qual',palette ='Dark2'  ) + labs(subtitle = "Se destacan los distritos mal clusterizados")
+
+pamPlot=base + geom_point(size=3, 
+                          aes(color=pamIPE))  + 
+        labs(title = "PAM") 
+# hacer notorios los paises mal clusterizados
+pamPlot + geom_text_repel(size=4,
+                          aes(label=PAMlabels),
+                          max.overlaps = 50,
+                          min.segment.length = unit(0, 'lines'))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
